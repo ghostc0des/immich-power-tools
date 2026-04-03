@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { appDb } from "@/db";
 import { importJobs, importJobItems } from "@/db/schema";
 import { getProcessor } from "./registry";
@@ -67,10 +67,10 @@ export async function runImportJob(
       await appDb
         .update(importJobItems)
         .set({ status: "skipped" })
-        .where(inArray(importJobItems.assetId, skipAssetIds));
+        .where(and(eq(importJobItems.jobId, jobId), inArray(importJobItems.assetId, skipAssetIds)));
       await appDb
         .update(importJobs)
-        .set({ skippedCount: skipAssetIds.length })
+        .set({ skippedCount: sql`${importJobs.skippedCount} + ${skipAssetIds.length}` })
         .where(eq(importJobs.id, jobId));
     }
 
@@ -78,8 +78,7 @@ export async function runImportJob(
     const pending = await appDb
       .select()
       .from(importJobItems)
-      .where(eq(importJobItems.jobId, jobId))
-      .then((rows) => rows.filter((r) => r.status === "pending"));
+      .where(and(eq(importJobItems.jobId, jobId), eq(importJobItems.status, "pending")));
 
     const processorContext = { ...context, albumId };
 
