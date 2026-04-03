@@ -20,6 +20,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: "platform, url, and assets are required" });
   }
 
+  if (assets.some((a: unknown) => typeof (a as any).id !== "string")) {
+    return res.status(400).json({ error: "Each asset must have a string id" });
+  }
+
   const [job] = await appDb
     .insert(importJobs)
     .values({

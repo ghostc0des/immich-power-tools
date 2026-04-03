@@ -13,6 +13,26 @@ export const createImportJob = async (params: CreateImportJobParams): Promise<{ 
   return API.post(IMPORT_JOBS_PATH, params);
 };
 
-export const getImportJob = async (jobId: string) => {
+export interface ImportJobStatus {
+  job: {
+    id: string;
+    status: string;
+    platform: string;
+    totalCount: number;
+    uploadedCount: number;
+    skippedCount: number;
+    failedCount: number;
+    importData: string;
+  };
+  items: {
+    id: string;
+    assetId: string;
+    status: string;
+    immichId: string | null;
+    error: string | null;
+  }[];
+}
+
+export const getImportJob = async (jobId: string): Promise<ImportJobStatus> => {
   return API.get(IMPORT_JOB_PATH(jobId));
 };

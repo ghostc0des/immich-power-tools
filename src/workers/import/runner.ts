@@ -21,6 +21,10 @@ export async function getJobItems(jobId: string) {
 }
 
 export async function resumePendingJobs() {
+  // Reset jobs that were mid-flight when the server last crashed.
+  // We cannot restart workers here — no auth headers are available at boot.
+  // Workers restart automatically when the polling endpoint (GET /api/import-jobs/[jobId])
+  // detects a pending job with no active worker.
   await appDb
     .update(importJobs)
     .set({ status: "pending" })
