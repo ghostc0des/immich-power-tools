@@ -21,10 +21,25 @@ export async function getJobItems(jobId: string) {
 }
 
 export async function resumePendingJobs() {
-  // Reset jobs that were mid-flight when the server last crashed.
+  // Reset any jobs stuck in 'processing' from a previous crashed run.
   // We cannot restart workers here — no auth headers are available at boot.
   // Workers restart automatically when the polling endpoint (GET /api/import-jobs/[jobId])
   // detects a pending job with no active worker.
+
+  // First reset stuck items (must happen before the job status reset)
+  const stuckJobs = await appDb
+    .select({ id: importJobs.id })
+    .from(importJobs)
+    .where(eq(importJobs.status, "processing"));
+
+  if (stuckJobs.length > 0) {
+    const stuckJobIds = stuckJobs.map((j) => j.id);
+    await appDb
+      .update(importJobItems)
+      .set({ status: "pending" })
+      .where(and(inArray(importJobItems.jobId, stuckJobIds), eq(importJobItems.status, "processing")));
+  }
+
   await appDb
     .update(importJobs)
     .set({ status: "pending" })

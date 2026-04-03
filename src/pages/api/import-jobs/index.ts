@@ -4,6 +4,7 @@ import { importJobs, importJobItems } from "@/db/schema";
 import { getCurrentUser } from "@/handlers/serverUtils/user.utils";
 import { getUserHeaders } from "@/helpers/user.helper";
 import { runImportJob } from "@/workers/import/runner";
+import { getProcessor } from "@/workers/import/registry";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
@@ -22,6 +23,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (assets.some((a: unknown) => typeof (a as any).id !== "string")) {
     return res.status(400).json({ error: "Each asset must have a string id" });
+  }
+
+  try {
+    getProcessor(platform);
+  } catch {
+    return res.status(400).json({ error: `Unknown platform: ${platform}` });
   }
 
   const [job] = await appDb

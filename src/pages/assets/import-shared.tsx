@@ -209,7 +209,12 @@ export default function ImportSharedPage() {
           setImportAllLoading(false);
           setImportAllDialogOpen(false);
 
-          const importData = JSON.parse(job.importData);
+          let importData: Record<string, unknown> = {};
+          try {
+            importData = JSON.parse(job.importData);
+          } catch {
+            // malformed importData — skip album name append
+          }
           const failedCount = job.failedCount;
           const skippedCount = job.skippedCount;
           const uploadedCount = job.uploadedCount;

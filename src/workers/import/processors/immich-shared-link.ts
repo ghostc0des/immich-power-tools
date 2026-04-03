@@ -285,11 +285,12 @@ export class ImmichSharedLinkProcessor implements ImportProcessor {
       albumId = albumOptions.addToAlbumId.trim();
     }
 
-    return {
-      skipAssetIds,
-      albumId,
-      importDataPatch: albumId ? { albumId } : undefined,
-    };
+    const tag = await ensurePowerToolsTag({ ...context.headers, "Content-Type": "application/json" } as HeadersRecord);
+    const importDataPatch: Record<string, unknown> = {};
+    if (albumId) importDataPatch.albumId = albumId;
+    importDataPatch.tagId = tag.id;
+
+    return { skipAssetIds, albumId, importDataPatch };
   }
 
   async processItem(
@@ -332,9 +333,12 @@ export class ImmichSharedLinkProcessor implements ImportProcessor {
     // Strip Content-Type for multipart upload (same pattern as upload-all.ts)
     const { ["Content-Type"]: _omit, ...uploadHeaders } = headers;
 
-    // Ensure the power-tools tag exists and upload
-    const tag = await ensurePowerToolsTag(headers);
-    const immichId = await uploadAssetBuffer(asset, downloaded, uploadHeaders, headers, tag.id);
+    // Read tagId from importData set during setup()
+    const importData = JSON.parse(job.importData) as { albumId?: string; tagId?: string };
+    const tagId = importData.tagId;
+    if (!tagId) throw new Error("tagId missing from job importData — setup() may not have completed");
+
+    const immichId = await uploadAssetBuffer(asset, downloaded, uploadHeaders as HeadersRecord, headers as HeadersRecord, tagId);
 
     // Add to album if one was resolved during setup
     if (context.albumId) {
