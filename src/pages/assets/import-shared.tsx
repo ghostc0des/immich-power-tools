@@ -159,7 +159,6 @@ export default function ImportSharedPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [uploadBanner, setUploadBanner] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [importAllLoading, setImportAllLoading] = useState(false);
-  const [importAllDialogOpen, setImportAllDialogOpen] = useState(false);
   const [albumImportMode, setAlbumImportMode] = useState<"album" | "no-album" | "existing-album">("album");
   const [albumNameInput, setAlbumNameInput] = useState("");
   const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
@@ -175,10 +174,10 @@ export default function ImportSharedPage() {
   }, [albumNameInput]);
 
   useEffect(() => {
-    if (importAllDialogOpen) {
+    if (sharedData) {
       listAlbums().then(setExistingAlbums).catch(console.error);
     }
-  }, [importAllDialogOpen]);
+  }, [sharedData]);
 
   useEffect(() => {
     if (sharedData?.album?.albumName) {
@@ -207,7 +206,6 @@ export default function ImportSharedPage() {
           clearInterval(interval);
           setActiveJobId(null);
           setImportAllLoading(false);
-          setImportAllDialogOpen(false);
 
           let importData: Record<string, unknown> = {};
           try {
@@ -253,7 +251,6 @@ export default function ImportSharedPage() {
     setSubmittedLink(null);
     setUploadBanner(null);
     setImportAllLoading(false);
-    setImportAllDialogOpen(false);
     setAlbumImportMode("album");
     setAlbumNameInput("");
     setSelectedAssetIds(new Set());
@@ -402,7 +399,6 @@ export default function ImportSharedPage() {
               setPreviewLoading(false);
               setUploadBanner(null);
               setImportAllLoading(false);
-              setImportAllDialogOpen(false);
               setAlbumImportMode("album");
               setAlbumNameInput("");
               setSelectedAssetIds(new Set());
@@ -430,16 +426,22 @@ export default function ImportSharedPage() {
               <Button
                 variant="default"
                 size="sm"
-                disabled={importAllLoading || importableAssetCount === 0}
+                disabled={
+                  importAllLoading ||
+                  importableAssetCount === 0 ||
+                  (albumImportMode === "existing-album" && !selectedAlbumId)
+                }
                 onClick={() => {
-                  if (importAllLoading) {
-                    return;
-                  }
-                  if (!albumNameInput.trim()) {
-                    setAlbumNameInput(albumDetails?.albumName || "Imported shared album");
-                  }
-                  setAlbumImportMode("album");
-                  setImportAllDialogOpen(true);
+                  if (importAllLoading) return;
+                  const shouldCreateAlbum = albumImportMode === "album";
+                  handleImportAll({
+                    createAlbum: shouldCreateAlbum,
+                    albumName: shouldCreateAlbum ? albumNameInput.trim() : undefined,
+                    addToAlbumId:
+                      albumImportMode === "existing-album" && selectedAlbumId
+                        ? selectedAlbumId
+                        : undefined,
+                  });
                 }}
               >
                 {importAllLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
