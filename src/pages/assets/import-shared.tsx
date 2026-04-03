@@ -17,7 +17,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -734,127 +733,6 @@ export default function ImportSharedPage() {
           )}
         </section>
       </div>
-      <Dialog
-        open={importAllDialogOpen}
-        onOpenChange={(open) => {
-          if (importAllLoading) {
-            return;
-          }
-          setImportAllDialogOpen(open);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{selectedAssetIds.size > 0 ? "Import selected assets" : "Import all assets"}</DialogTitle>
-            <DialogDescription>
-              Decide whether to create a new Immich album for these imported assets.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="flex flex-col gap-2">
-              <Label className="text-sm font-medium text-foreground">Destination</Label>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button
-                  type="button"
-                  variant={albumImportMode === "album" ? "default" : "outline"}
-                  className="flex-1"
-                  onClick={() => setAlbumImportMode("album")}
-                  disabled={importAllLoading}
-                >
-                  Create a new album
-                </Button>
-                <Button
-                  type="button"
-                  variant={albumImportMode === "existing-album" ? "default" : "outline"}
-                  className="flex-1"
-                  onClick={() => setAlbumImportMode("existing-album")}
-                  disabled={importAllLoading}
-                >
-                  Existing Album
-                </Button>
-                <Button
-                  type="button"
-                  variant={albumImportMode === "no-album" ? "default" : "outline"}
-                  className="flex-1"
-                  onClick={() => setAlbumImportMode("no-album")}
-                  disabled={importAllLoading}
-                >
-                  No Album
-                </Button>
-              </div>
-            </div>
-            {albumImportMode === "album" && (
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="import-album-name">Album name</Label>
-                <Input
-                  id="import-album-name"
-                  value={albumNameInput}
-                  onChange={(event) => setAlbumNameInput(event.target.value)}
-                  placeholder="Imported shared album"
-                  disabled={importAllLoading}
-                />
-              </div>
-            )}
-            {albumImportMode === "existing-album" && (
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="existing-album">Select Album</Label>
-                <Select onValueChange={setSelectedAlbumId} value={selectedAlbumId || undefined}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select an album" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {existingAlbums.map((album) => (
-                      <SelectItem key={album.id} value={album.id}>
-                        {album.albumName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-          {importAllLoading && jobProgress && (
-            <p className="text-sm text-muted-foreground text-center">
-              {jobProgress.uploaded + jobProgress.skipped} / {jobProgress.total} processed
-              {jobProgress.failed > 0 && ` · ${jobProgress.failed} failed`}
-            </p>
-          )}
-          <div className="flex justify-end gap-2 pt-4">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setImportAllDialogOpen(false)}
-              disabled={importAllLoading}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                if (importAllLoading) {
-                  return;
-                }
-                const shouldCreateAlbum = albumImportMode === "album";
-                const trimmedAlbumName = albumNameInput.trim();
-                setImportAllDialogOpen(false);
-                handleImportAll({
-                  createAlbum: shouldCreateAlbum,
-                  albumName: shouldCreateAlbum ? trimmedAlbumName : undefined,
-                  addToAlbumId: albumImportMode === "existing-album" && selectedAlbumId ? selectedAlbumId : undefined,
-                });
-              }}
-              disabled={
-                importAllLoading || 
-                (albumImportMode === "album" && albumNameInput.trim().length === 0) ||
-                (albumImportMode === "existing-album" && !selectedAlbumId)
-              }
-            >
-              {importAllLoading ? "Importing..." : "Start import"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       <Dialog
         open={!!activeVideoAsset}
         onOpenChange={(open) => {
