@@ -507,6 +507,90 @@ export default function ImportSharedPage() {
             </Card>
           )}
 
+          {sharedData && albumDetails && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Destination</CardTitle>
+                <CardDescription>
+                  Choose where to save the imported assets in your Immich library.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    type="button"
+                    variant={albumImportMode === "album" ? "default" : "outline"}
+                    className="flex-1"
+                    onClick={() => setAlbumImportMode("album")}
+                    disabled={importAllLoading}
+                  >
+                    Create a new album
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={albumImportMode === "existing-album" ? "default" : "outline"}
+                    className="flex-1"
+                    onClick={() => setAlbumImportMode("existing-album")}
+                    disabled={importAllLoading}
+                  >
+                    Existing album
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={albumImportMode === "no-album" ? "default" : "outline"}
+                    className="flex-1"
+                    onClick={() => setAlbumImportMode("no-album")}
+                    disabled={importAllLoading}
+                  >
+                    No album
+                  </Button>
+                </div>
+
+                {albumImportMode === "album" && (
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="destination-album-name">Album name</Label>
+                    <Input
+                      id="destination-album-name"
+                      value={albumNameInput}
+                      onChange={(e) => setAlbumNameInput(e.target.value)}
+                      placeholder="Imported shared album"
+                      disabled={importAllLoading}
+                    />
+                  </div>
+                )}
+
+                {albumImportMode === "existing-album" && (
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="destination-existing-album">Select album</Label>
+                    <Select
+                      onValueChange={setSelectedAlbumId}
+                      value={selectedAlbumId || undefined}
+                      disabled={importAllLoading}
+                    >
+                      <SelectTrigger id="destination-existing-album">
+                        <SelectValue placeholder="Select an album" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {existingAlbums.map((album) => (
+                          <SelectItem key={album.id} value={album.id}>
+                            {album.albumName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {importAllLoading && jobProgress && (
+                  <p className="text-sm text-muted-foreground">
+                    {jobProgress.uploaded + jobProgress.skipped} / {jobProgress.total} processed
+                    {jobProgress.failed > 0 && ` · ${jobProgress.failed} failed`}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {albumDetails && sharedData && (
             <Card>
               <CardHeader className="space-y-1">
