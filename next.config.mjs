@@ -3,6 +3,9 @@
 const nextConfig = {
   reactStrictMode: false,
   output: 'standalone',
+  experimental: {
+    instrumentationHook: true,
+  },
   images: {
     unoptimized: true,
   },
