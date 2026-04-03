@@ -3,5 +3,8 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { runMigrations } = await import("./src/db");
     await runMigrations();
+
+    const { resumePendingJobs } = await import("./src/workers/import/runner");
+    await resumePendingJobs();
   }
 }
