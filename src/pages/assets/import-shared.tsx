@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useState } from "react";
+import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import PageLayout from "@/components/layouts/PageLayout";
 import Header from "@/components/shared/Header";
@@ -168,6 +168,12 @@ export default function ImportSharedPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobProgress, setJobProgress] = useState<{ uploaded: number; skipped: number; failed: number; total: number } | null>(null);
 
+  const albumNameRef = useRef(albumNameInput);
+
+  useEffect(() => {
+    albumNameRef.current = albumNameInput;
+  }, [albumNameInput]);
+
   useEffect(() => {
     if (importAllDialogOpen) {
       listAlbums().then(setExistingAlbums).catch(console.error);
@@ -189,7 +195,7 @@ export default function ImportSharedPage() {
 
     const interval = setInterval(async () => {
       try {
-        const { job, items } = await getImportJob(activeJobId);
+        const { job } = await getImportJob(activeJobId);
         setJobProgress({
           uploaded: job.uploadedCount,
           skipped: job.skippedCount,
@@ -222,7 +228,7 @@ export default function ImportSharedPage() {
           }
 
           if (importData.albumId && uploadedCount > 0) {
-            message = `${message} Added to album "${albumNameInput || "selected album"}".`;
+            message = `${message} Added to album "${albumNameRef.current || "selected album"}".`;
           }
 
           setUploadBanner({ type: bannerType, message });
