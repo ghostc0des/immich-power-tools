@@ -1,11 +1,14 @@
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
+import fs from "fs";
 import path from "path";
 import * as schema from "./schema";
 
 const DB_PATH =
   process.env.APP_DB_PATH || path.join(process.cwd(), "data", "app.db");
+
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 const client = createClient({ url: `file:${DB_PATH}` });
 

@@ -3,6 +3,7 @@ import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogTrigger, Dialog
 import { Button, ButtonProps } from '../ui/button';
 import { ShareLinkFilters } from '@/types/shareLink';
 import { generateShareLink } from '@/handlers/api/shareLink.handler';
+import { createShareKey, getShareKey } from '@/handlers/api/share-key.handler';
 import { Input } from '../ui/input';
 import { Label } from '@radix-ui/react-label';
 
@@ -28,8 +29,7 @@ export default function ShareAssetsTrigger({ filters, buttonProps }: ShareAssets
   const [keyError, setKeyError] = useState<string | null>(null);
 
   const checkShareKey = async () => {
-    const res = await fetch('/api/share-key');
-    const data = await res.json();
+    const data = await getShareKey();
     setEndpointConfigured(data.endpointConfigured);
     setShareKeyExists(data.exists);
   };
@@ -37,12 +37,11 @@ export default function ShareAssetsTrigger({ filters, buttonProps }: ShareAssets
   const handleCreateKey = async () => {
     setCreatingKey(true);
     setKeyError(null);
-    const res = await fetch('/api/share-key', { method: 'POST' });
-    if (res.ok) {
+    try {
+      await createShareKey();
       setShareKeyExists(true);
-    } else {
-      const data = await res.json();
-      setKeyError(data.message ?? 'Failed to create share key');
+    } catch (err: any) {
+      setKeyError(err.message ?? 'Failed to create share key');
     }
     setCreatingKey(false);
   };

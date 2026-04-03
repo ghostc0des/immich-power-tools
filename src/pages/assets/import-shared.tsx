@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { listAlbums } from "@/handlers/api/album.handler";
+import { importShared, importSharedUploadAll } from "@/handlers/api/import-shared.handler";
 import { IAlbum } from "@/types/album";
 
 interface IAlbumContributorCount {
@@ -200,27 +201,14 @@ export default function ImportSharedPage() {
 
     setLoading(true);
     try {
-      const response = await fetch("/api/import-shared", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ link: shareLink }),
-      });
-
-      if (!response.ok) {
-        const errorPayload = await response.json().catch(() => ({}));
-        throw new Error(errorPayload.error || "Failed to import shared album");
-      }
-
-      const payload: IImportSharedResponse = await response.json();
+      const payload: IImportSharedResponse = await importShared(shareLink);
       setSharedData(payload);
       setSubmittedLink(payload.link);
       setUploadBanner(null);
       setImportAllLoading(false);
       setAlbumImportMode("album");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unexpected error";
+    } catch (err: any) {
+      const message = err.message ?? "Unexpected error";
       setError(message);
     } finally {
       setLoading(false);
@@ -309,32 +297,21 @@ export default function ImportSharedPage() {
     setUploadBanner(null);
     setImportAllLoading(true);
     try {
-      const response = await fetch("/api/import-shared/upload-all", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          origin: sharedData.origin,
-          key: sharedData.key,
-          assets: uploadableAssets.map((asset) => ({
-            id: asset.id,
-            originalFileName: asset.originalFileName,
-            type: asset.type,
-            fileCreatedAt: asset.fileCreatedAt ?? null,
-            localDateTime: asset.localDateTime ?? null,
-            duration: asset.duration ?? null,
-            isFavorite: asset.isFavorite ?? false,
-            isArchived: asset.isArchived ?? false,
-          })),
-          albumOptions,
-        }),
+      const result = await importSharedUploadAll({
+        origin: sharedData.origin,
+        key: sharedData.key,
+        assets: uploadableAssets.map((asset) => ({
+          id: asset.id,
+          originalFileName: asset.originalFileName,
+          type: asset.type,
+          fileCreatedAt: asset.fileCreatedAt ?? null,
+          localDateTime: asset.localDateTime ?? null,
+          duration: asset.duration ?? null,
+          isFavorite: asset.isFavorite ?? false,
+          isArchived: asset.isArchived ?? false,
+        })),
+        albumOptions,
       });
-
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to import shared archive");
-      }
 
       const processedAssetIds: string[] = result.processedAssetIds ?? [];
       const skippedAssetIds: string[] = result.skippedAssetIds ?? [];

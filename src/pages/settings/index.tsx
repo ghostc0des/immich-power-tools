@@ -1,5 +1,6 @@
 import PageLayout from "@/components/layouts/PageLayout";
 import Header from "@/components/shared/Header";
+import { deleteApiKey, getApiKeys, regenerateApiKey } from "@/handlers/api/settings.handler";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,10 +24,11 @@ export default function SettingsPage() {
 
   const fetchKeys = async () => {
     setLoading(true);
-    const res = await fetch("/api/settings/api-keys");
-    if (res.ok) {
-      const data = await res.json();
+    try {
+      const data = await getApiKeys();
       setKeys(data);
+    } catch {
+      // silently fail — keys list stays empty
     }
     setLoading(false);
   };
@@ -37,26 +39,24 @@ export default function SettingsPage() {
 
   const handleDelete = async (purpose: string) => {
     setDeleting(purpose);
-    const res = await fetch(`/api/settings/api-keys/${purpose}`, { method: "DELETE" });
-    if (res.ok) {
+    try {
+      await deleteApiKey(purpose);
       setKeys((prev) => prev.filter((k) => k.purpose !== purpose));
       toast.success("API key deleted");
-    } else {
-      const data = await res.json();
-      toast.error(data.message ?? "Failed to delete API key");
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to delete API key");
     }
     setDeleting(null);
   };
 
   const handleRegenerate = async (purpose: string) => {
     setRegenerating(purpose);
-    const res = await fetch(`/api/settings/api-keys/${purpose}`, { method: "PUT" });
-    if (res.ok) {
+    try {
+      await regenerateApiKey(purpose);
       await fetchKeys();
       toast.success("API key regenerated");
-    } else {
-      const data = await res.json();
-      toast.error(data.message ?? "Failed to regenerate API key");
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to regenerate API key");
     }
     setRegenerating(null);
   };
