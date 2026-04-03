@@ -1,5 +1,5 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Calendar, Loader2, Images, User, Clock } from "lucide-react";
 import PageLayout from "@/components/layouts/PageLayout";
 import Header from "@/components/shared/Header";
 import { Button } from "@/components/ui/button";
@@ -489,102 +489,106 @@ export default function ImportSharedPage() {
           )}
 
           {sharedLinkDetails && sharedData && albumDetails && (
-            <Card>
-              <CardHeader className="space-y-1">
-                <CardTitle className="text-xl">{albumDetails.albumName}</CardTitle>
+            <Card className="overflow-hidden">
+              {/* Album identity */}
+              <CardHeader className="pb-4">
+                <CardTitle className="text-xl leading-tight">{albumDetails.albumName}</CardTitle>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Images className="h-3.5 w-3.5 shrink-0" />
+                    {albumDetails.assetCount} assets
+                  </span>
+                  {albumDetails.owner?.name && (
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <User className="h-3.5 w-3.5 shrink-0" />
+                      {albumDetails.owner.name}
+                    </span>
+                  )}
+                  {albumDetails.startDate && (
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Calendar className="h-3.5 w-3.5 shrink-0" />
+                      {formatDateOnly(albumDetails.startDate)}
+                      {albumDetails.endDate && albumDetails.endDate !== albumDetails.startDate && (
+                        <> → {formatDateOnly(albumDetails.endDate)}</>
+                      )}
+                    </span>
+                  )}
+                  {sharedLinkDetails.expiresAt && (
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Clock className="h-3.5 w-3.5 shrink-0" />
+                      Expires {formatDate(sharedLinkDetails.expiresAt)}
+                    </span>
+                  )}
+                </div>
               </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-3">
-                <InfoRow label="Expires" value={sharedLinkDetails.expiresAt ? formatDate(sharedLinkDetails.expiresAt) : "No expiry"} />
-                {albumDetails && (
-                  <>
-                    <InfoRow label="Owner" value={albumDetails.owner?.name ?? "Unknown"} />
-                    <InfoRow label="Assets" value={albumDetails.assetCount} />
-                    <InfoRow label="Date range" value={`${formatDateOnly(albumDetails.startDate)} → ${formatDateOnly(albumDetails.endDate)}`} />
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          )}
 
-          {sharedData && albumDetails && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Destination</CardTitle>
-                <CardDescription>
-                  Choose where to save the imported assets in your Immich library.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Button
-                    type="button"
-                    variant={albumImportMode === "album" ? "default" : "outline"}
-                    className="flex-1"
-                    onClick={() => setAlbumImportMode("album")}
-                    disabled={importAllLoading}
-                  >
-                    Create a new album
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={albumImportMode === "existing-album" ? "default" : "outline"}
-                    className="flex-1"
-                    onClick={() => setAlbumImportMode("existing-album")}
-                    disabled={importAllLoading}
-                  >
-                    Existing album
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={albumImportMode === "no-album" ? "default" : "outline"}
-                    className="flex-1"
-                    onClick={() => setAlbumImportMode("no-album")}
-                    disabled={importAllLoading}
-                  >
-                    No album
-                  </Button>
+              {/* Divider */}
+              <div className="mx-6 border-t border-border" />
+
+              {/* Destination */}
+              <CardContent className="flex flex-col gap-4 pt-4">
+                <div className="flex items-center justify-between gap-4">
+                  <Label className="text-sm font-medium shrink-0">Import to</Label>
+                  <div className="flex rounded-md border border-border overflow-hidden">
+                    {(["album", "existing-album", "no-album"] as const).map((mode, i) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setAlbumImportMode(mode)}
+                        disabled={importAllLoading}
+                        className={[
+                          "px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+                          i > 0 ? "border-l border-border" : "",
+                          albumImportMode === mode
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
+                        ].join(" ")}
+                      >
+                        {mode === "album" ? "New album" : mode === "existing-album" ? "Existing" : "None"}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {albumImportMode === "album" && (
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="destination-album-name">Album name</Label>
-                    <Input
-                      id="destination-album-name"
-                      value={albumNameInput}
-                      onChange={(e) => setAlbumNameInput(e.target.value)}
-                      placeholder="Imported shared album"
-                      disabled={importAllLoading}
-                    />
-                  </div>
+                  <Input
+                    id="destination-album-name"
+                    value={albumNameInput}
+                    onChange={(e) => setAlbumNameInput(e.target.value)}
+                    placeholder="Album name"
+                    disabled={importAllLoading}
+                  />
                 )}
 
                 {albumImportMode === "existing-album" && (
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="destination-existing-album">Select album</Label>
-                    <Select
-                      onValueChange={setSelectedAlbumId}
-                      value={selectedAlbumId || undefined}
-                      disabled={importAllLoading}
-                    >
-                      <SelectTrigger id="destination-existing-album">
-                        <SelectValue placeholder="Select an album" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {existingAlbums.map((album) => (
-                          <SelectItem key={album.id} value={album.id}>
-                            {album.albumName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <Select
+                    onValueChange={setSelectedAlbumId}
+                    value={selectedAlbumId || undefined}
+                    disabled={importAllLoading}
+                  >
+                    <SelectTrigger id="destination-existing-album">
+                      <SelectValue placeholder="Select an album" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {existingAlbums.map((album) => (
+                        <SelectItem key={album.id} value={album.id}>
+                          {album.albumName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
 
                 {importAllLoading && jobProgress && (
-                  <p className="text-sm text-muted-foreground">
-                    {jobProgress.uploaded + jobProgress.skipped} / {jobProgress.total} processed
-                    {jobProgress.failed > 0 && ` · ${jobProgress.failed} failed`}
-                  </p>
+                  <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
+                    <p className="text-xs text-muted-foreground">
+                      {jobProgress.uploaded + jobProgress.skipped} / {jobProgress.total} processed
+                      {jobProgress.failed > 0 && (
+                        <span className="text-destructive"> · {jobProgress.failed} failed</span>
+                      )}
+                    </p>
+                  </div>
                 )}
               </CardContent>
             </Card>
