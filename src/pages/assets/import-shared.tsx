@@ -22,7 +22,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { listAlbums } from "@/handlers/api/album.handler";
-import { importShared, importSharedUploadAll } from "@/handlers/api/import-shared.handler";
+import { importShared } from "@/handlers/api/import-shared.handler";
+import { createImportJob, getImportJob } from "@/handlers/api/import-jobs.handler";
 import { IAlbum } from "@/types/album";
 
 interface IAlbumContributorCount {
@@ -164,6 +165,8 @@ export default function ImportSharedPage() {
   const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
   const [existingAlbums, setExistingAlbums] = useState<IAlbum[]>([]);
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [jobProgress, setJobProgress] = useState<{ uploaded: number; skipped: number; failed: number; total: number } | null>(null);
 
   useEffect(() => {
     if (importAllDialogOpen) {
@@ -180,6 +183,57 @@ export default function ImportSharedPage() {
       setAlbumNameInput("");
     }
   }, [sharedData]);
+
+  useEffect(() => {
+    if (!activeJobId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const { job, items } = await getImportJob(activeJobId);
+        setJobProgress({
+          uploaded: job.uploadedCount,
+          skipped: job.skippedCount,
+          failed: job.failedCount,
+          total: job.totalCount,
+        });
+
+        if (job.status === "completed" || job.status === "failed") {
+          clearInterval(interval);
+          setActiveJobId(null);
+          setImportAllLoading(false);
+          setImportAllDialogOpen(false);
+
+          const importData = JSON.parse(job.importData);
+          const failedCount = job.failedCount;
+          const skippedCount = job.skippedCount;
+          const uploadedCount = job.uploadedCount;
+          const bannerType: "success" | "error" = failedCount > 0 ? "error" : "success";
+          let message: string;
+
+          if (!uploadedCount && skippedCount && !failedCount) {
+            message = `All ${skippedCount} assets already exist on Immich.`;
+          } else if (failedCount) {
+            const skippedSuffix = skippedCount ? `, ${skippedCount} skipped` : "";
+            message = `Imported ${uploadedCount} assets, ${failedCount} failed${skippedSuffix}.`;
+          } else if (skippedCount) {
+            message = `Imported ${uploadedCount} assets, skipped ${skippedCount} already on Immich.`;
+          } else {
+            message = `Imported ${uploadedCount} assets successfully.`;
+          }
+
+          if (importData.albumId && uploadedCount > 0) {
+            message = `${message} Added to album "${albumNameInput || "selected album"}".`;
+          }
+
+          setUploadBanner({ type: bannerType, message });
+        }
+      } catch (err) {
+        console.error("Polling error", err);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [activeJobId]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -297,9 +351,11 @@ export default function ImportSharedPage() {
     setUploadBanner(null);
     setImportAllLoading(true);
     try {
-      const result = await importSharedUploadAll({
-        origin: sharedData.origin,
-        key: sharedData.key,
+      const job = await createImportJob({
+        platform: "immich",
+        url: sharedData.origin,
+        urlConfig: { key: sharedData.key },
+        importData: { albumOptions },
         assets: uploadableAssets.map((asset) => ({
           id: asset.id,
           originalFileName: asset.originalFileName,
@@ -310,39 +366,12 @@ export default function ImportSharedPage() {
           isFavorite: asset.isFavorite ?? false,
           isArchived: asset.isArchived ?? false,
         })),
-        albumOptions,
       });
-
-      const processedAssetIds: string[] = result.processedAssetIds ?? [];
-      const skippedAssetIds: string[] = result.skippedAssetIds ?? [];
-      const failed: { assetId: string; reason?: string }[] = result.failed ?? [];
-
-      const failedCount = failed.length;
-      const skippedCount = skippedAssetIds.length;
-      const uploadedCount = result.uploadedCount ?? processedAssetIds.length;
-      let bannerType: "success" | "error" = failedCount ? "error" : "success";
-      let message: string;
-      if (!uploadedCount && skippedCount && !failedCount) {
-        message = `All ${skippedCount} assets already exist on Immich.`;
-      } else if (failedCount) {
-        const skippedSuffix = skippedCount ? `, ${skippedCount} skipped` : "";
-        message = `Imported ${uploadedCount} assets, ${failedCount} failed${skippedSuffix}.`;
-      } else if (skippedCount) {
-        message = `Imported ${uploadedCount} assets, skipped ${skippedCount} already on Immich.`;
-      } else {
-        message = `Imported ${uploadedCount} assets successfully.`;
-      }
-      if (options.createAlbum && uploadedCount > 0 && normalizedAlbumName) {
-        message = `${message} Added to album "${normalizedAlbumName}".`;
-      } else if (options.addToAlbumId && uploadedCount > 0) {
-        const album = existingAlbums.find((a) => a.id === options.addToAlbumId);
-        message = `${message} Added to album "${album?.albumName || "existing album"}".`;
-      }
-      setUploadBanner({ type: bannerType, message });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to import shared archive";
-      setUploadBanner({ type: "error", message });
-    } finally {
+      setActiveJobId(job.jobId);
+      setJobProgress({ uploaded: 0, skipped: 0, failed: 0, total: uploadableAssets.length });
+      // importAllLoading stays true — cleared when polling detects completion
+    } catch (err: any) {
+      setUploadBanner({ type: "error", message: err.message ?? "Failed to start import" });
       setImportAllLoading(false);
     }
   };
@@ -687,6 +716,12 @@ export default function ImportSharedPage() {
               </div>
             )}
           </div>
+          {importAllLoading && jobProgress && (
+            <p className="text-sm text-muted-foreground text-center">
+              {jobProgress.uploaded + jobProgress.skipped} / {jobProgress.total} processed
+              {jobProgress.failed > 0 && ` · ${jobProgress.failed} failed`}
+            </p>
+          )}
           <div className="flex justify-end gap-2 pt-4">
             <Button
               type="button"
