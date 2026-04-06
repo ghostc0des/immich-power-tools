@@ -58,3 +58,7 @@ export const deleteAlbums = async (albumIds: string[]) => {
 export const mergeAlbums = async (primaryAlbumId: string, secondaryAlbumIds: string[]) => {
   return API.post(MERGE_ALBUMS_PATH, { primaryAlbumId, secondaryAlbumIds });
 }
+
+export const createAlbumWithAssets = async (albumName: string, assetIds: string[]) => {
+  return API.post(CREATE_ALBUM_PATH, { albumName, assetIds });
+}
