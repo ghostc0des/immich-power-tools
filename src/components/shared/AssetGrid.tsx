@@ -176,16 +176,6 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
       isSelected: selectedIds.includes(p.id),
       isVideo: p.type === "VIDEO",
       duration: p.duration != null ? String(p.duration) : undefined,
-      tags: [
-        {
-          title: "Immich Link",
-          value: (
-            <a href={exImmichUrl + "/photos/" + p.id} target="_blank" rel="noopener noreferrer">
-              Open in Immich
-            </a>
-          ),
-        },
-      ],
     }));
   }, [assets, selectedIds, exImmichUrl]);
 
@@ -310,8 +300,22 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
       <RowsPhotoAlbum
         photos={images}
         targetRowHeight={150}
+        rowConstraints={{ singleRowMaxHeight: 300 }}
         onClick={({ index, event, photo }) => handleClick(index, photo, event)}
-        render={{ image: renderImage }}
+        render={{
+          image: renderImage,
+          extras: (_, { photo }) => (
+            <a
+              href={exImmichUrl + "/photos/" + photo.id}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute bottom-1 left-1 bg-black/60 text-yellow-300 text-xs px-2 py-0.5 rounded"
+              onClick={(e) => e.stopPropagation()}
+            >
+              Open in Immich
+            </a>
+          ),
+        }}
       />
     </div>
   );
