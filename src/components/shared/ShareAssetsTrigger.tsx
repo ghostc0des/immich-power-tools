@@ -63,13 +63,27 @@ export default function ShareAssetsTrigger({ filters, buttonProps }: ShareAssets
     });
   }
 
-  const handleCopy = () => {
-    if (generatedLink) {
-      navigator.clipboard.writeText(generatedLink);
+  const handleCopy = async () => {
+    if (!generatedLink) return;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(generatedLink);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = generatedLink;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
       setCopied(true);
       setTimeout(() => {
         setCopied(false);
       }, 2000);
+    } catch {
+      setErrorMessage('Failed to copy link');
     }
   }
 

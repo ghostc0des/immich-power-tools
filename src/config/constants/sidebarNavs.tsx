@@ -1,4 +1,4 @@
-import { Copy, GalleryHorizontal, GalleryVerticalEnd, Image as ImageIcon, MapPin, MapPinX, Rewind, Search, Settings, Share2, User, Video   } from "lucide-react";
+import { Copy, GalleryHorizontal, GalleryVerticalEnd, Image as ImageIcon, MapPin, MapPinX, PackageSearch, Rewind, Search, Settings, Share2, User, Video } from "lucide-react";
 
 export const sidebarNavs = [
   // {
@@ -50,7 +50,7 @@ export const sidebarNavs = [
   // Empty Videos
   {
     title: "Empty Videos",
-    link: "/assets/empty-videos", 
+    link: "/assets/empty-videos",
     icon: <Video className="h-4 w-4" />,
   },
   // Bulk Duplicate
@@ -58,6 +58,11 @@ export const sidebarNavs = [
     title: "Bulk Duplicate Finder",
     link: "/assets/bulk-duplicate-finder",
     icon: <Copy className="h-4 w-4" />,
+  },
+  {
+    title: "Orphan Finder",
+    link: "/assets/orphan-finder",
+    icon: <PackageSearch className="h-4 w-4" />,
   },
   {
     title: "Settings",

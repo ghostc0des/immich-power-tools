@@ -8,6 +8,7 @@ import {
   LIST_MISSING_LOCATION_DATES_PATH,
   UPDATE_ASSETS_PATH,
   LIST_DUPLICATES_PATH,
+  LIST_ORPHAN_ASSETS_PATH,
 } from "@/config/routes";
 import { cleanUpAsset } from "@/helpers/asset.helper";
 import API from "@/lib/api";
@@ -54,6 +55,7 @@ export interface IUpdateAssetsParams {
   longitude?: number;
   dateTimeOriginal?: string;
   duplicateId?: string | null;
+  isFavorite?: boolean;
 }
 
 export const updateAssets = async (params: IUpdateAssetsParams) => {
@@ -100,4 +102,26 @@ export interface IAssetAlbumInfo {
 
 export const getAlbumsByAssetIds = async (assetIds: string[]): Promise<Record<string, IAssetAlbumInfo[]>> => {
   return API.post(ASSET_ALBUMS_BY_ASSETS_PATH, { assetIds });
+}
+
+export interface IOrphanFilters {
+  notInAlbum?: boolean;
+  noPeople?: boolean;
+  noLocation?: boolean;
+  notFavorited?: boolean;
+  type?: string;
+  limit?: number;
+  page?: number;
+}
+
+export const listOrphanAssets = async (filters: IOrphanFilters): Promise<IAsset[]> => {
+  const params: Record<string, string> = {};
+  if (filters.notInAlbum) params.notInAlbum = "true";
+  if (filters.noPeople) params.noPeople = "true";
+  if (filters.noLocation) params.noLocation = "true";
+  if (filters.notFavorited) params.notFavorited = "true";
+  if (filters.type) params.type = filters.type;
+  if (filters.limit) params.limit = String(filters.limit);
+  if (filters.page) params.page = String(filters.page);
+  return API.get(LIST_ORPHAN_ASSETS_PATH, params).then((assets) => assets.map(cleanUpAsset));
 }
