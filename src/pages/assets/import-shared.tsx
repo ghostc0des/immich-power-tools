@@ -1,5 +1,6 @@
-import React, { FormEvent, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import React, { FormEvent, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Calendar, Loader2, Images, User, Clock, CheckCircle2, XCircle, Clock3 } from "lucide-react";
 import PageLayout from "@/components/layouts/PageLayout";
 import Header from "@/components/shared/Header";
 import { Button } from "@/components/ui/button";
@@ -17,12 +18,16 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { listAlbums } from "@/handlers/api/album.handler";
+import { importShared } from "@/handlers/api/import-shared.handler";
+import { createImportJob, getImportJob, listImportJobs } from "@/handlers/api/import-jobs.handler";
+import ImportJobDetailDialog from "@/components/import/ImportJobDetailDialog";
+import { validatePermissions } from "@/handlers/api/validate-permissions.handler";
 import { IAlbum } from "@/types/album";
+import { AlertTriangle } from "lucide-react";
 
 interface IAlbumContributorCount {
   userId: string;
@@ -157,18 +162,41 @@ export default function ImportSharedPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [uploadBanner, setUploadBanner] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [importAllLoading, setImportAllLoading] = useState(false);
-  const [importAllDialogOpen, setImportAllDialogOpen] = useState(false);
   const [albumImportMode, setAlbumImportMode] = useState<"album" | "no-album" | "existing-album">("album");
   const [albumNameInput, setAlbumNameInput] = useState("");
   const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
   const [existingAlbums, setExistingAlbums] = useState<IAlbum[]>([]);
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [jobProgress, setJobProgress] = useState<{ uploaded: number; skipped: number; failed: number; total: number } | null>(null);
+  const [tagAssets, setTagAssets] = useState(true);
+  const [detailJobId, setDetailJobId] = useState<string | null>(null);
+
+  const { data: permissions } = useQuery({
+    queryKey: ["validate-permissions"],
+    queryFn: validatePermissions,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  const { data: importHistory, refetch: refetchHistory } = useQuery({
+    queryKey: ["import-jobs"],
+    queryFn: listImportJobs,
+    staleTime: 30 * 1000,
+  });
+
+
+  const albumNameRef = useRef(albumNameInput);
 
   useEffect(() => {
-    if (importAllDialogOpen) {
+    albumNameRef.current = albumNameInput;
+  }, [albumNameInput]);
+
+  useEffect(() => {
+    if (sharedData) {
       listAlbums().then(setExistingAlbums).catch(console.error);
     }
-  }, [importAllDialogOpen]);
+  }, [sharedData]);
 
   useEffect(() => {
     if (sharedData?.album?.albumName) {
@@ -180,6 +208,64 @@ export default function ImportSharedPage() {
     }
   }, [sharedData]);
 
+  useEffect(() => {
+    if (!activeJobId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const { job } = await getImportJob(activeJobId);
+        setJobProgress({
+          uploaded: job.uploadedCount,
+          skipped: job.skippedCount,
+          failed: job.failedCount,
+          total: job.totalCount,
+        });
+
+        if (job.status === "completed" || job.status === "failed") {
+          clearInterval(interval);
+          setActiveJobId(null);
+          setImportAllLoading(false);
+
+          let importData: Record<string, unknown> = {};
+          try {
+            importData = JSON.parse(job.importData);
+          } catch {
+            // malformed importData — skip album name append
+          }
+          const failedCount = job.failedCount;
+          const skippedCount = job.skippedCount;
+          const uploadedCount = job.uploadedCount;
+          const bannerType: "success" | "error" = (failedCount > 0 || job.status === "failed") ? "error" : "success";
+          let message: string;
+
+          if (job.status === "failed" && importData.error && typeof importData.error === "string") {
+            message = importData.error;
+          } else if (!uploadedCount && skippedCount && !failedCount) {
+            message = `All ${skippedCount} assets already exist on Immich.`;
+          } else if (failedCount) {
+            const skippedSuffix = skippedCount ? `, ${skippedCount} skipped` : "";
+            message = `Imported ${uploadedCount} assets, ${failedCount} failed${skippedSuffix}.`;
+          } else if (skippedCount) {
+            message = `Imported ${uploadedCount} assets, skipped ${skippedCount} already on Immich.`;
+          } else {
+            message = `Imported ${uploadedCount} assets successfully.`;
+          }
+
+          if (importData.albumId && uploadedCount > 0) {
+            message = `${message} Added to album "${albumNameRef.current || "selected album"}".`;
+          }
+
+          setUploadBanner({ type: bannerType, message });
+          refetchHistory();
+        }
+      } catch (err) {
+        console.error("Polling error", err);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [activeJobId]);
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
@@ -187,7 +273,6 @@ export default function ImportSharedPage() {
     setSubmittedLink(null);
     setUploadBanner(null);
     setImportAllLoading(false);
-    setImportAllDialogOpen(false);
     setAlbumImportMode("album");
     setAlbumNameInput("");
     setSelectedAssetIds(new Set());
@@ -200,27 +285,14 @@ export default function ImportSharedPage() {
 
     setLoading(true);
     try {
-      const response = await fetch("/api/import-shared", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ link: shareLink }),
-      });
-
-      if (!response.ok) {
-        const errorPayload = await response.json().catch(() => ({}));
-        throw new Error(errorPayload.error || "Failed to import shared album");
-      }
-
-      const payload: IImportSharedResponse = await response.json();
+      const payload: IImportSharedResponse = await importShared(shareLink);
       setSharedData(payload);
       setSubmittedLink(payload.link);
       setUploadBanner(null);
       setImportAllLoading(false);
       setAlbumImportMode("album");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unexpected error";
+    } catch (err: any) {
+      const message = err.message ?? "Unexpected error";
       setError(message);
     } finally {
       setLoading(false);
@@ -309,63 +381,27 @@ export default function ImportSharedPage() {
     setUploadBanner(null);
     setImportAllLoading(true);
     try {
-      const response = await fetch("/api/import-shared/upload-all", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          origin: sharedData.origin,
-          key: sharedData.key,
-          assets: uploadableAssets.map((asset) => ({
-            id: asset.id,
-            originalFileName: asset.originalFileName,
-            type: asset.type,
-            fileCreatedAt: asset.fileCreatedAt ?? null,
-            localDateTime: asset.localDateTime ?? null,
-            duration: asset.duration ?? null,
-            isFavorite: asset.isFavorite ?? false,
-            isArchived: asset.isArchived ?? false,
-          })),
-          albumOptions,
-        }),
+      const job = await createImportJob({
+        platform: "immich",
+        url: sharedData.origin,
+        urlConfig: { key: sharedData.key },
+        importData: { albumOptions, tagAssets },
+        assets: uploadableAssets.map((asset) => ({
+          id: asset.id,
+          originalFileName: asset.originalFileName,
+          type: asset.type,
+          fileCreatedAt: asset.fileCreatedAt ?? null,
+          localDateTime: asset.localDateTime ?? null,
+          duration: asset.duration ?? null,
+          isFavorite: asset.isFavorite ?? false,
+          isArchived: asset.isArchived ?? false,
+        })),
       });
-
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to import shared archive");
-      }
-
-      const processedAssetIds: string[] = result.processedAssetIds ?? [];
-      const skippedAssetIds: string[] = result.skippedAssetIds ?? [];
-      const failed: { assetId: string; reason?: string }[] = result.failed ?? [];
-
-      const failedCount = failed.length;
-      const skippedCount = skippedAssetIds.length;
-      const uploadedCount = result.uploadedCount ?? processedAssetIds.length;
-      let bannerType: "success" | "error" = failedCount ? "error" : "success";
-      let message: string;
-      if (!uploadedCount && skippedCount && !failedCount) {
-        message = `All ${skippedCount} assets already exist on Immich.`;
-      } else if (failedCount) {
-        const skippedSuffix = skippedCount ? `, ${skippedCount} skipped` : "";
-        message = `Imported ${uploadedCount} assets, ${failedCount} failed${skippedSuffix}.`;
-      } else if (skippedCount) {
-        message = `Imported ${uploadedCount} assets, skipped ${skippedCount} already on Immich.`;
-      } else {
-        message = `Imported ${uploadedCount} assets successfully.`;
-      }
-      if (options.createAlbum && uploadedCount > 0 && normalizedAlbumName) {
-        message = `${message} Added to album "${normalizedAlbumName}".`;
-      } else if (options.addToAlbumId && uploadedCount > 0) {
-        const album = existingAlbums.find((a) => a.id === options.addToAlbumId);
-        message = `${message} Added to album "${album?.albumName || "existing album"}".`;
-      }
-      setUploadBanner({ type: bannerType, message });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to import shared archive";
-      setUploadBanner({ type: "error", message });
-    } finally {
+      setActiveJobId(job.jobId);
+      setJobProgress({ uploaded: 0, skipped: 0, failed: 0, total: uploadableAssets.length });
+      // importAllLoading stays true — cleared when polling detects completion
+    } catch (err: any) {
+      setUploadBanner({ type: "error", message: err.message ?? "Failed to start import" });
       setImportAllLoading(false);
     }
   };
@@ -385,7 +421,6 @@ export default function ImportSharedPage() {
               setPreviewLoading(false);
               setUploadBanner(null);
               setImportAllLoading(false);
-              setImportAllDialogOpen(false);
               setAlbumImportMode("album");
               setAlbumNameInput("");
               setSelectedAssetIds(new Set());
@@ -413,16 +448,23 @@ export default function ImportSharedPage() {
               <Button
                 variant="default"
                 size="sm"
-                disabled={importAllLoading || importableAssetCount === 0}
+                disabled={
+                  importAllLoading ||
+                  importableAssetCount === 0 ||
+                  (albumImportMode === "existing-album" && !selectedAlbumId) ||
+                  (permissions && !permissions.canUpload)
+                }
                 onClick={() => {
-                  if (importAllLoading) {
-                    return;
-                  }
-                  if (!albumNameInput.trim()) {
-                    setAlbumNameInput(albumDetails?.albumName || "Imported shared album");
-                  }
-                  setAlbumImportMode("album");
-                  setImportAllDialogOpen(true);
+                  if (importAllLoading) return;
+                  const shouldCreateAlbum = albumImportMode === "album";
+                  handleImportAll({
+                    createAlbum: shouldCreateAlbum,
+                    albumName: shouldCreateAlbum ? albumNameInput.trim() : undefined,
+                    addToAlbumId:
+                      albumImportMode === "existing-album" && selectedAlbumId
+                        ? selectedAlbumId
+                        : undefined,
+                  });
                 }}
               >
                 {importAllLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -434,6 +476,12 @@ export default function ImportSharedPage() {
       />
       <div className={!sharedData ? "flex flex-1 justify-center px-4 py-6" : "flex flex-col gap-6 p-4"}>
         <section className={!sharedData ? "w-full max-w-6xl flex flex-col gap-6" : "w-full flex flex-col gap-6"}>
+          {permissions?.canUpload === false && (
+            <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              Your API key does not have permission to upload assets. Import will not work until this is fixed.
+            </div>
+          )}
           {!sharedData && (
             <Card>
               <CardHeader className="space-y-2">
@@ -470,19 +518,173 @@ export default function ImportSharedPage() {
             </Card>
           )}
 
-          {sharedLinkDetails && sharedData && albumDetails && (
+          {!sharedData && importHistory?.jobs && importHistory.jobs.length > 0 && (
             <Card>
-              <CardHeader className="space-y-1">
-                <CardTitle className="text-xl">{albumDetails.albumName}</CardTitle>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg">Previous imports</CardTitle>
               </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-3">
-                <InfoRow label="Expires" value={sharedLinkDetails.expiresAt ? formatDate(sharedLinkDetails.expiresAt) : "No expiry"} />
-                {albumDetails && (
-                  <>
-                    <InfoRow label="Owner" value={albumDetails.owner?.name ?? "Unknown"} />
-                    <InfoRow label="Assets" value={albumDetails.assetCount} />
-                    <InfoRow label="Date range" value={`${formatDateOnly(albumDetails.startDate)} → ${formatDateOnly(albumDetails.endDate)}`} />
-                  </>
+              <CardContent>
+                <div className="divide-y divide-border">
+                  {importHistory.jobs.map((job) => {
+                    let jobImportData: Record<string, unknown> = {};
+                    try { jobImportData = JSON.parse(job.importData); } catch { /* ignore */ }
+                    const albumOpts = jobImportData.albumOptions as { albumName?: string } | undefined;
+                    const albumName = albumOpts?.albumName;
+                    const statusIcon = job.status === "completed" ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    ) : job.status === "failed" ? (
+                      <XCircle className="h-4 w-4 text-destructive shrink-0" />
+                    ) : (
+                      <Clock3 className="h-4 w-4 text-muted-foreground shrink-0" />
+                    );
+
+                    return (
+                      <div
+                        key={job.id}
+                        className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 cursor-pointer hover:bg-muted/50 -mx-2 px-2 rounded-md transition-colors"
+                        onClick={() => setDetailJobId(job.id)}
+                      >
+                        {statusIcon}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {albumName || job.url}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {job.uploadedCount} uploaded
+                            {job.skippedCount > 0 && `, ${job.skippedCount} skipped`}
+                            {job.failedCount > 0 && `, ${job.failedCount} failed`}
+                            {" · "}
+                            {formatDate(job.createdAt)}
+                          </p>
+                        </div>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          job.status === "completed" ? "bg-emerald-500/10 text-emerald-600" :
+                          job.status === "failed" ? "bg-destructive/10 text-destructive" :
+                          "bg-muted text-muted-foreground"
+                        }`}>
+                          {job.status}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {sharedLinkDetails && sharedData && albumDetails && (
+            <Card className="overflow-hidden">
+              {/* Album identity */}
+              <CardHeader className="pb-4">
+                <CardTitle className="text-xl leading-tight">{albumDetails.albumName}</CardTitle>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Images className="h-3.5 w-3.5 shrink-0" />
+                    {albumDetails.assetCount} assets
+                  </span>
+                  {albumDetails.owner?.name && (
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <User className="h-3.5 w-3.5 shrink-0" />
+                      {albumDetails.owner.name}
+                    </span>
+                  )}
+                  {albumDetails.startDate && (
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Calendar className="h-3.5 w-3.5 shrink-0" />
+                      {formatDateOnly(albumDetails.startDate)}
+                      {albumDetails.endDate && albumDetails.endDate !== albumDetails.startDate && (
+                        <> → {formatDateOnly(albumDetails.endDate)}</>
+                      )}
+                    </span>
+                  )}
+                  {sharedLinkDetails.expiresAt && (
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Clock className="h-3.5 w-3.5 shrink-0" />
+                      Expires {formatDate(sharedLinkDetails.expiresAt)}
+                    </span>
+                  )}
+                </div>
+              </CardHeader>
+
+              {/* Divider */}
+              <div className="mx-6 border-t border-border" />
+
+              {/* Destination */}
+              <CardContent className="flex flex-col gap-4 pt-4">
+                <div className="flex items-center justify-between gap-4">
+                  <Label className="text-sm font-medium shrink-0">Import to</Label>
+                  <div className="flex rounded-md border border-border overflow-hidden">
+                    {(["album", "existing-album", "no-album"] as const).map((mode, i) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setAlbumImportMode(mode)}
+                        disabled={importAllLoading}
+                        className={[
+                          "px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+                          i > 0 ? "border-l border-border" : "",
+                          albumImportMode === mode
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
+                        ].join(" ")}
+                      >
+                        {mode === "album" ? "New album" : mode === "existing-album" ? "Existing" : "None"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {albumImportMode === "album" && (
+                  <Input
+                    id="destination-album-name"
+                    value={albumNameInput}
+                    onChange={(e) => setAlbumNameInput(e.target.value)}
+                    placeholder="Album name"
+                    disabled={importAllLoading}
+                  />
+                )}
+
+                {albumImportMode === "existing-album" && (
+                  <Select
+                    onValueChange={setSelectedAlbumId}
+                    value={selectedAlbumId || undefined}
+                    disabled={importAllLoading}
+                  >
+                    <SelectTrigger id="destination-existing-album">
+                      <SelectValue placeholder="Select an album" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {existingAlbums.map((album) => (
+                        <SelectItem key={album.id} value={album.id}>
+                          {album.albumName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="tag-assets"
+                    checked={tagAssets}
+                    onCheckedChange={(checked) => setTagAssets(!!checked)}
+                    disabled={importAllLoading}
+                  />
+                  <Label htmlFor="tag-assets" className="text-sm text-muted-foreground cursor-pointer">
+                    Tag imported assets with &quot;immich-power-tools&quot;
+                  </Label>
+                </div>
+
+                {importAllLoading && jobProgress && (
+                  <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
+                    <p className="text-xs text-muted-foreground">
+                      {jobProgress.uploaded + jobProgress.skipped} / {jobProgress.total} processed
+                      {jobProgress.failed > 0 && (
+                        <span className="text-destructive"> · {jobProgress.failed} failed</span>
+                      )}
+                    </p>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -632,121 +834,6 @@ export default function ImportSharedPage() {
         </section>
       </div>
       <Dialog
-        open={importAllDialogOpen}
-        onOpenChange={(open) => {
-          if (importAllLoading) {
-            return;
-          }
-          setImportAllDialogOpen(open);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{selectedAssetIds.size > 0 ? "Import selected assets" : "Import all assets"}</DialogTitle>
-            <DialogDescription>
-              Decide whether to create a new Immich album for these imported assets.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="flex flex-col gap-2">
-              <Label className="text-sm font-medium text-foreground">Destination</Label>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button
-                  type="button"
-                  variant={albumImportMode === "album" ? "default" : "outline"}
-                  className="flex-1"
-                  onClick={() => setAlbumImportMode("album")}
-                  disabled={importAllLoading}
-                >
-                  Create a new album
-                </Button>
-                <Button
-                  type="button"
-                  variant={albumImportMode === "existing-album" ? "default" : "outline"}
-                  className="flex-1"
-                  onClick={() => setAlbumImportMode("existing-album")}
-                  disabled={importAllLoading}
-                >
-                  Existing Album
-                </Button>
-                <Button
-                  type="button"
-                  variant={albumImportMode === "no-album" ? "default" : "outline"}
-                  className="flex-1"
-                  onClick={() => setAlbumImportMode("no-album")}
-                  disabled={importAllLoading}
-                >
-                  No Album
-                </Button>
-              </div>
-            </div>
-            {albumImportMode === "album" && (
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="import-album-name">Album name</Label>
-                <Input
-                  id="import-album-name"
-                  value={albumNameInput}
-                  onChange={(event) => setAlbumNameInput(event.target.value)}
-                  placeholder="Imported shared album"
-                  disabled={importAllLoading}
-                />
-              </div>
-            )}
-            {albumImportMode === "existing-album" && (
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="existing-album">Select Album</Label>
-                <Select onValueChange={setSelectedAlbumId} value={selectedAlbumId || undefined}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select an album" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {existingAlbums.map((album) => (
-                      <SelectItem key={album.id} value={album.id}>
-                        {album.albumName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-          <div className="flex justify-end gap-2 pt-4">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setImportAllDialogOpen(false)}
-              disabled={importAllLoading}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                if (importAllLoading) {
-                  return;
-                }
-                const shouldCreateAlbum = albumImportMode === "album";
-                const trimmedAlbumName = albumNameInput.trim();
-                setImportAllDialogOpen(false);
-                handleImportAll({
-                  createAlbum: shouldCreateAlbum,
-                  albumName: shouldCreateAlbum ? trimmedAlbumName : undefined,
-                  addToAlbumId: albumImportMode === "existing-album" && selectedAlbumId ? selectedAlbumId : undefined,
-                });
-              }}
-              disabled={
-                importAllLoading || 
-                (albumImportMode === "album" && albumNameInput.trim().length === 0) ||
-                (albumImportMode === "existing-album" && !selectedAlbumId)
-              }
-            >
-              {importAllLoading ? "Importing..." : "Start import"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
         open={!!activeVideoAsset}
         onOpenChange={(open) => {
           if (!open) {
@@ -809,6 +896,7 @@ export default function ImportSharedPage() {
           )}
         </DialogContent>
       </Dialog>
+      <ImportJobDetailDialog jobId={detailJobId} onClose={() => setDetailJobId(null)} />
     </PageLayout>
   );
 }

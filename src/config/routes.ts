@@ -85,3 +85,21 @@ export const SHARE_LINK_DOWNLOAD_PATH = (token: string) => BASE_API_ENDPOINT + "
 export const DOWNLOAD_ASSETS_PATH = BASE_PROXY_ENDPOINT + "/download/archive";
 
 export const LIST_DUPLICATES_PATH = BASE_PROXY_ENDPOINT + "/duplicates";
+
+// Settings
+export const SETTINGS_API_KEYS_PATH = BASE_API_ENDPOINT + "/settings/api-keys";
+export const SETTINGS_API_KEY_PATH = (purpose: string) => BASE_API_ENDPOINT + "/settings/api-keys/" + purpose;
+
+// Share Key
+export const SHARE_KEY_PATH = BASE_API_ENDPOINT + "/share-key";
+
+// Import Shared
+export const IMPORT_SHARED_PATH = BASE_API_ENDPOINT + "/import-shared";
+export const IMPORT_SHARED_UPLOAD_ALL_PATH = BASE_API_ENDPOINT + "/import-shared/upload-all";
+
+// Permissions
+export const VALIDATE_PERMISSIONS_PATH = BASE_API_ENDPOINT + "/validate-permissions";
+
+// Import Jobs (queue)
+export const IMPORT_JOBS_PATH = BASE_API_ENDPOINT + "/import-jobs";
+export const IMPORT_JOB_PATH = (jobId: string) => BASE_API_ENDPOINT + "/import-jobs/" + jobId;
