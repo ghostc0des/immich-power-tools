@@ -4,8 +4,16 @@
 import "leaflet/dist/leaflet.css";
 import L, { LatLngExpression } from 'leaflet';
 
-import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css'; // Re-uses images from ~leaflet package
-import 'leaflet-defaulticon-compatibility';
+// Fix default marker icons for bundlers that don't support ~ aliases
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
+L.Icon.Default.mergeOptions({
+  iconUrl: markerIcon.src,
+  iconRetinaUrl: markerIcon2x.src,
+  shadowUrl: markerShadow.src,
+});
 
 import { MapContainer, TileLayer, useMapEvents } from "react-leaflet";
 import { useState } from "react";
