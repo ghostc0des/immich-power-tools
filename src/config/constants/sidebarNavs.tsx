@@ -1,4 +1,4 @@
-import { Copy, GalleryHorizontal, GalleryVerticalEnd, Image as ImageIcon, MapPin, MapPinX, Rewind, Search, Share2, User, Video   } from "lucide-react";
+import { Copy, GalleryHorizontal, GalleryVerticalEnd, Image as ImageIcon, MapPin, MapPinX, PackageSearch, Rewind, Search, Share2, User, Video } from "lucide-react";
 
 export const sidebarNavs = [
   // {
@@ -59,5 +59,10 @@ export const sidebarNavs = [
     link: "/assets/bulk-duplicate-finder",
     icon: <Copy className="h-4 w-4" />,
   },
-  
+  {
+    title: "Orphan Finder",
+    link: "/assets/orphan-finder",
+    icon: <PackageSearch className="h-4 w-4" />,
+  },
+
 ];
