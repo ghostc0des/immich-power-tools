@@ -55,6 +55,7 @@ export interface IUpdateAssetsParams {
   longitude?: number;
   dateTimeOriginal?: string;
   duplicateId?: string | null;
+  isFavorite?: boolean;
 }
 
 export const updateAssets = async (params: IUpdateAssetsParams) => {

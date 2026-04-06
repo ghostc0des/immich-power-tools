@@ -76,6 +76,7 @@ export default async function handler(
         personId: person.id,
         personName: person.name,
         thumbnailPath: person.thumbnailPath,
+        isHidden: person.isHidden,
       })
       .from(assetFaces)
       .innerJoin(person, eq(assetFaces.personId, person.id))

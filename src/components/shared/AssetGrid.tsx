@@ -11,6 +11,8 @@ import { usePhotoSelectionContext } from '@/contexts/PhotoSelectionContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import dynamic from 'next/dynamic';
 import { Heart, Info, Trash2, ExternalLink } from 'lucide-react';
+import { updateAssets } from '@/handlers/api/asset.handler';
+import { toast } from '@/components/ui/use-toast';
 
 const AssetInfoPanel = dynamic(() => import('@/components/asset-info/AssetInfoPanel'), { ssr: false });
 
@@ -33,10 +35,53 @@ interface AssetGridRef {
 const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal = true, selectable = false, onSelectionChange, onDeleteAsset, onFavoriteAsset }, ref) => {
   const [index, setIndex] = useState(-1);
   const [lastSelectedIndex, setLastSelectedIndex] = useState(-1);
-  const [showInfoPanel, setShowInfoPanel] = useState(false);
+  const [showInfoPanel, setShowInfoPanel] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('assetInfoPanelOpen') === 'true'
+    }
+    return false
+  });
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => new Set(assets.filter(a => a.isFavorite).map(a => a.id)));
   const { exImmichUrl } = useConfig();
   // Use context for selection state
   const { selectedIds, updateContext } = usePhotoSelectionContext();
+
+  // Sync favoriteIds when assets change
+  useEffect(() => {
+    setFavoriteIds(new Set(assets.filter(a => a.isFavorite).map(a => a.id)));
+  }, [assets]);
+
+  const handleToggleFavorite = useCallback(async (assetId: string) => {
+    const isFav = favoriteIds.has(assetId);
+    const newFav = !isFav;
+    // Optimistic update
+    setFavoriteIds(prev => {
+      const next = new Set(prev);
+      newFav ? next.add(assetId) : next.delete(assetId);
+      return next;
+    });
+    try {
+      await updateAssets({ ids: [assetId], isFavorite: newFav });
+      toast({ title: newFav ? "Added to favorites" : "Removed from favorites" });
+      onFavoriteAsset?.(assetId, newFav);
+    } catch {
+      // Revert on failure
+      setFavoriteIds(prev => {
+        const next = new Set(prev);
+        isFav ? next.add(assetId) : next.delete(assetId);
+        return next;
+      });
+      toast({ title: "Error", description: "Failed to update favorite", variant: "destructive" });
+    }
+  }, [favoriteIds, onFavoriteAsset]);
+
+  const toggleInfoPanel = useCallback(() => {
+    setShowInfoPanel((v) => {
+      const next = !v
+      localStorage.setItem('assetInfoPanelOpen', String(next))
+      return next
+    })
+  }, []);
 
   const currentAsset = index >= 0 && index < assets.length ? assets[index] : null;
 
@@ -156,16 +201,17 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
 
   const toolbarButtons = useMemo(() => {
     if (!currentAsset) return [];
+    const isFav = favoriteIds.has(currentAsset.id);
     return [
       <button
         key="favorite"
         type="button"
         className="yarl__button"
-        title={currentAsset.isFavorite ? "Unfavorite" : "Favorite"}
-        onClick={() => onFavoriteAsset?.(currentAsset.id, !currentAsset.isFavorite)}
+        title={isFav ? "Unfavorite" : "Favorite"}
+        onClick={() => handleToggleFavorite(currentAsset.id)}
       >
         <Heart
-          className={`h-6 w-6 ${currentAsset.isFavorite ? 'fill-red-500 text-red-500' : 'text-white'}`}
+          className={`h-6 w-6 ${isFav ? 'fill-red-500 text-red-500' : 'text-white'}`}
         />
       </button>,
       <button
@@ -173,7 +219,7 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
         type="button"
         className="yarl__button"
         title="Info"
-        onClick={() => setShowInfoPanel((v) => !v)}
+        onClick={toggleInfoPanel}
       >
         <Info className={`h-6 w-6 ${showInfoPanel ? 'text-blue-400' : 'text-white'}`} />
       </button>,
@@ -201,7 +247,7 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
         </button>,
       ] : []),
     ];
-  }, [currentAsset, showInfoPanel, onDeleteAsset, onFavoriteAsset, handleOpenInImmich]);
+  }, [currentAsset, showInfoPanel, onDeleteAsset, onFavoriteAsset, handleOpenInImmich, favoriteIds, handleToggleFavorite]);
 
   return (
     <div>
@@ -210,7 +256,7 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
         plugins={[Download, Video]}
         open={index >= 0}
         index={index}
-        close={() => { setIndex(-1); setShowInfoPanel(false); }}
+        close={() => { setIndex(-1); }}
         on={{
           view: ({ index }) => setIndex(index),
         }}

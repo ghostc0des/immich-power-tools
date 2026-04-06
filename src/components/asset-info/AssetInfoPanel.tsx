@@ -8,9 +8,17 @@ import {
   Camera,
   Aperture,
   MapPin,
+  EyeOff,
+  ExternalLink,
+  Check,
 } from 'lucide-react'
 import API from '@/lib/api'
 import { PERSON_THUBNAIL_PATH } from '@/config/routes'
+import { updatePerson } from '@/handlers/api/people.handler'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { toast } from '@/components/ui/use-toast'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css'
@@ -47,7 +55,7 @@ export interface IAssetDetail {
   rating: number | null
   fps: number | null
   projectionType: string | null
-  people: { personId: string; personName: string; thumbnailPath: string }[]
+  people: { personId: string; personName: string; thumbnailPath: string; isHidden: boolean }[]
 }
 
 interface AssetInfoPanelProps {
@@ -64,6 +72,113 @@ function formatExposureTime(exposure: string): string {
   if (isNaN(val)) return exposure
   if (val >= 1) return `${val} s`
   return `1/${Math.round(1 / val)} s`
+}
+
+interface PersonChipProps {
+  person: { personId: string; personName: string; thumbnailPath: string }
+  exImmichUrl: string
+  isHidden: boolean
+  onUpdate: (updated: { personId: string; personName?: string; hidden?: boolean }) => void
+}
+
+function PersonChip({ person: p, exImmichUrl, isHidden: hidden, onUpdate }: PersonChipProps) {
+  const [name, setName] = useState(p.personName)
+  const [saving, setSaving] = useState(false)
+  const [open, setOpen] = useState(false)
+
+  const handleRename = async () => {
+    if (name === p.personName) { setOpen(false); return }
+    setSaving(true)
+    try {
+      await updatePerson(p.personId, { name })
+      onUpdate({ personId: p.personId, personName: name })
+      toast({ title: "Updated", description: `Renamed to "${name}"` })
+      setOpen(false)
+    } catch {
+      toast({ title: "Error", description: "Failed to rename", variant: "destructive" })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleHide = async () => {
+    setSaving(true)
+    try {
+      await updatePerson(p.personId, { isHidden: true })
+      onUpdate({ personId: p.personId, hidden: true })
+      toast({ title: "Hidden", description: `"${p.personName || 'Unknown'}" hidden` })
+      setOpen(false)
+    } catch {
+      toast({ title: "Error", description: "Failed to hide person", variant: "destructive" })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className="flex items-center gap-2 px-2 py-1 rounded-full bg-muted hover:bg-muted/80 transition-colors"
+        >
+          <div className="relative h-6 w-6 shrink-0">
+            <img
+              src={PERSON_THUBNAIL_PATH(p.personId)}
+              alt={p.personName}
+              className={`h-6 w-6 rounded-full object-cover ${hidden ? 'opacity-40' : ''}`}
+            />
+            {hidden && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <EyeOff className="h-3.5 w-3.5 text-foreground" />
+              </div>
+            )}
+          </div>
+          <span className={`text-xs font-medium ${hidden ? 'line-through text-muted-foreground' : ''}`}>{p.personName || 'Unknown'}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-3 z-[10000]" side="bottom" align="start">
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <img
+              src={PERSON_THUBNAIL_PATH(p.personId)}
+              alt={p.personName}
+              className="h-16 w-16 rounded-full object-cover"
+            />
+            <span className="text-sm font-medium truncate">{p.personName || 'Unknown'}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Name"
+              className="h-8 text-sm"
+              onKeyDown={(e) => { if (e.key === 'Enter') handleRename() }}
+            />
+            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={handleRename} disabled={saving}>
+              <Check className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex flex-col gap-1">
+            <button
+              onClick={handleHide}
+              disabled={saving}
+              className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors w-full text-left"
+            >
+              <EyeOff className="h-4 w-4" /> Hide person
+            </button>
+            <a
+              href={exImmichUrl + '/people/' + p.personId}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors w-full"
+            >
+              <ExternalLink className="h-4 w-4" /> Open in Immich
+            </a>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 function MiniMap({ latitude, longitude }: { latitude: number; longitude: number }) {
@@ -119,12 +234,19 @@ function MiniMap({ latitude, longitude }: { latitude: number; longitude: number 
 export default function AssetInfoPanel({ assetId }: AssetInfoPanelProps) {
   const [detail, setDetail] = useState<IAssetDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
   const { exImmichUrl } = useConfig()
 
   useEffect(() => {
     setLoading(true)
+    setHiddenIds(new Set())
     API.get(`/api/assets/${assetId}/detail`)
-      .then(setDetail)
+      .then((data) => {
+        setDetail(data)
+        if (data?.people) {
+          setHiddenIds(new Set(data.people.filter((p: any) => p.isHidden).map((p: any) => p.personId)))
+        }
+      })
       .catch(() => setDetail(null))
       .finally(() => setLoading(false))
   }, [assetId])
@@ -180,23 +302,62 @@ export default function AssetInfoPanel({ assetId }: AssetInfoPanelProps) {
         {/* People */}
         {detail.people && detail.people.length > 0 && (
           <div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-2">People</h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-muted-foreground">People</h3>
+              <div className="flex items-center gap-2">
+                {detail.people.some((p) => !p.personName && !hiddenIds.has(p.personId)) && (
+                  <button
+                    onClick={async () => {
+                      const unnamed = detail.people.filter((p) => !p.personName && !hiddenIds.has(p.personId))
+                      try {
+                        await Promise.all(unnamed.map((p) => updatePerson(p.personId, { isHidden: true })))
+                        setHiddenIds((prev) => { const next = new Set(prev); unnamed.forEach((p) => next.add(p.personId)); return next })
+                        toast({ title: "Hidden", description: `Hidden ${unnamed.length} unnamed people` })
+                      } catch {
+                        toast({ title: "Error", description: "Failed to hide people", variant: "destructive" })
+                      }
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                    title="Hide unnamed people"
+                  >
+                    <EyeOff className="h-3.5 w-3.5" />
+                    Hide unnamed
+                  </button>
+                )}
+                {detail.people.some((p) => !hiddenIds.has(p.personId)) && (
+                  <button
+                    onClick={async () => {
+                      const unhidden = detail.people.filter((p) => !hiddenIds.has(p.personId))
+                      try {
+                        await Promise.all(unhidden.map((p) => updatePerson(p.personId, { isHidden: true })))
+                        setHiddenIds((prev) => { const next = new Set(prev); unhidden.forEach((p) => next.add(p.personId)); return next })
+                        toast({ title: "Hidden", description: `Hidden ${unhidden.length} people` })
+                      } catch {
+                        toast({ title: "Error", description: "Failed to hide people", variant: "destructive" })
+                      }
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                    title="Hide all people"
+                  >
+                    <EyeOff className="h-3.5 w-3.5" />
+                    Hide all
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="flex flex-wrap gap-2">
               {detail.people.map((p) => (
-                <a
-                  key={p.personId}
-                  href={exImmichUrl + '/people/' + p.personId}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-2 py-1 rounded-full bg-muted hover:bg-muted/80 transition-colors"
-                >
-                  <img
-                    src={PERSON_THUBNAIL_PATH(p.personId)}
-                    alt={p.personName}
-                    className="h-6 w-6 rounded-full object-cover"
-                  />
-                  <span className="text-xs font-medium">{p.personName || 'Unknown'}</span>
-                </a>
+                <PersonChip key={p.personId} person={p} exImmichUrl={exImmichUrl} isHidden={hiddenIds.has(p.personId)} onUpdate={(updated) => {
+                  if (updated.hidden) {
+                    setHiddenIds((prev) => new Set(prev).add(updated.personId))
+                  }
+                  if (updated.personName !== undefined) {
+                    setDetail((prev) => {
+                      if (!prev) return prev
+                      return { ...prev, people: prev.people.map((pp) => pp.personId === updated.personId ? { ...pp, personName: updated.personName! } : pp) }
+                    })
+                  }
+                }} />
               ))}
             </div>
           </div>
