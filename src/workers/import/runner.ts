@@ -76,10 +76,12 @@ export async function runImportJob(
 
     if (importDataPatch) {
       const merged = { ...JSON.parse(job.importData), ...importDataPatch };
+      const mergedStr = JSON.stringify(merged);
       await appDb
         .update(importJobs)
-        .set({ importData: JSON.stringify(merged) })
+        .set({ importData: mergedStr })
         .where(eq(importJobs.id, jobId));
+      job.importData = mergedStr;
     }
 
     if (skipAssetIds.length > 0) {
@@ -151,9 +153,16 @@ export async function runImportJob(
       .where(eq(importJobs.id, jobId));
   } catch (err: any) {
     console.error(`Import job ${jobId} failed fatally:`, err);
+    // Store error message in importData so the UI can display it
+    let existingData: Record<string, unknown> = {};
+    try {
+      const [current] = await appDb.select({ importData: importJobs.importData }).from(importJobs).where(eq(importJobs.id, jobId));
+      if (current) existingData = JSON.parse(current.importData);
+    } catch { /* ignore */ }
+    existingData.error = err?.message ?? "Unknown error";
     await appDb
       .update(importJobs)
-      .set({ status: "failed" })
+      .set({ status: "failed", importData: JSON.stringify(existingData) })
       .where(eq(importJobs.id, jobId));
   } finally {
     activeJobs.delete(jobId);

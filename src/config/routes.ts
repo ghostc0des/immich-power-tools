@@ -96,6 +96,9 @@ export const SHARE_KEY_PATH = BASE_API_ENDPOINT + "/share-key";
 export const IMPORT_SHARED_PATH = BASE_API_ENDPOINT + "/import-shared";
 export const IMPORT_SHARED_UPLOAD_ALL_PATH = BASE_API_ENDPOINT + "/import-shared/upload-all";
 
+// Permissions
+export const VALIDATE_PERMISSIONS_PATH = BASE_API_ENDPOINT + "/validate-permissions";
+
 // Import Jobs (queue)
 export const IMPORT_JOBS_PATH = BASE_API_ENDPOINT + "/import-jobs";
 export const IMPORT_JOB_PATH = (jobId: string) => BASE_API_ENDPOINT + "/import-jobs/" + jobId;

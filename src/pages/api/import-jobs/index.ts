@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { desc, eq } from "drizzle-orm";
 import { appDb } from "@/db";
 import { importJobs, importJobItems } from "@/db/schema";
 import { getCurrentUser } from "@/handlers/serverUtils/user.utils";
@@ -7,8 +8,22 @@ import { runImportJob } from "@/workers/import/runner";
 import { getProcessor } from "@/workers/import/registry";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method === "GET") {
+    const currentUser = await getCurrentUser(req);
+    if (!currentUser) return res.status(401).json({ error: "Unauthorized" });
+
+    const jobs = await appDb
+      .select()
+      .from(importJobs)
+      .where(eq(importJobs.userId, currentUser.id))
+      .orderBy(desc(importJobs.createdAt))
+      .limit(20);
+
+    return res.status(200).json({ jobs });
+  }
+
   if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
+    res.setHeader("Allow", "GET, POST");
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 

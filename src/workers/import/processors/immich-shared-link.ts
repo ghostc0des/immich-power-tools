@@ -111,6 +111,9 @@ const createImmichAlbum = async (albumName: string, headers: HeadersRecord): Pro
     body: JSON.stringify({ albumName }),
   });
   if (!response.ok) {
+    if (response.status === 403) {
+      throw new Error(`Your API key does not have permission to create albums. Try importing without creating an album, or use an API key with album.create permission.`);
+    }
     const body = await response.text().catch(() => "");
     throw new Error(`Failed to create album "${albumName}" (status ${response.status}): ${body || "Unknown error"}`);
   }
@@ -159,7 +162,7 @@ const uploadAssetBuffer = async (
   payload: DownloadedAssetPayload,
   uploadHeaders: HeadersRecord,
   jsonHeaders: HeadersRecord,
-  tagId: string
+  tagId?: string
 ): Promise<string> => {
   const fileType = asset.type ?? inferAssetTypeFromName(payload.fileName);
   const resolvedFileName = payload.fileName || asset.originalFileName || `${asset.id}.bin`;
@@ -200,8 +203,10 @@ const uploadAssetBuffer = async (
     throw new Error("Immich upload response did not include an asset id");
   }
 
-  const { tagAssetWithPowerTools } = await import("@/pages/api/import-shared/helpers");
-  await tagAssetWithPowerTools(tagId, uploadedId, jsonHeaders);
+  if (tagId) {
+    const { tagAssetWithPowerTools } = await import("@/pages/api/import-shared/helpers");
+    await tagAssetWithPowerTools(tagId, uploadedId, jsonHeaders);
+  }
   return uploadedId;
 };
 
@@ -285,10 +290,19 @@ export class ImmichSharedLinkProcessor implements ImportProcessor {
       albumId = albumOptions.addToAlbumId.trim();
     }
 
-    const tag = await ensurePowerToolsTag({ ...context.headers, "Content-Type": "application/json" } as HeadersRecord);
     const importDataPatch: Record<string, unknown> = {};
     if (albumId) importDataPatch.albumId = albumId;
-    importDataPatch.tagId = tag.id;
+
+    // Tag assets with "immich-power-tools" if enabled
+    const tagAssets = importData.tagAssets !== false; // default true for backwards compat
+    if (tagAssets) {
+      try {
+        const tag = await ensurePowerToolsTag({ ...context.headers, "Content-Type": "application/json" } as HeadersRecord);
+        importDataPatch.tagId = tag.id;
+      } catch (err) {
+        console.warn("[ImmichSharedLinkProcessor] Failed to create power-tools tag, skipping tagging", err);
+      }
+    }
 
     return { skipAssetIds, albumId, importDataPatch };
   }
@@ -333,10 +347,9 @@ export class ImmichSharedLinkProcessor implements ImportProcessor {
     // Strip Content-Type for multipart upload (same pattern as upload-all.ts)
     const { ["Content-Type"]: _omit, ...uploadHeaders } = headers;
 
-    // Read tagId from importData set during setup()
+    // Read tagId from importData set during setup() (optional)
     const importData = JSON.parse(job.importData) as { albumId?: string; tagId?: string };
     const tagId = importData.tagId;
-    if (!tagId) throw new Error("tagId missing from job importData — setup() may not have completed");
 
     const immichId = await uploadAssetBuffer(asset, downloaded, uploadHeaders as HeadersRecord, headers as HeadersRecord, tagId);
 

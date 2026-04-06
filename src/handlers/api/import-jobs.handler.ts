@@ -13,6 +13,23 @@ export const createImportJob = async (params: CreateImportJobParams): Promise<{ 
   return API.post(IMPORT_JOBS_PATH, params);
 };
 
+export interface ImportJobSummary {
+  id: string;
+  platform: string;
+  status: string;
+  url: string;
+  importData: string;
+  totalCount: number;
+  uploadedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  createdAt: string;
+}
+
+export const listImportJobs = async (): Promise<{ jobs: ImportJobSummary[] }> => {
+  return API.get(IMPORT_JOBS_PATH);
+};
+
 export interface ImportJobStatus {
   job: {
     id: string;
@@ -28,6 +45,7 @@ export interface ImportJobStatus {
     id: string;
     assetId: string;
     status: string;
+    itemData: string;
     immichId: string | null;
     error: string | null;
   }[];

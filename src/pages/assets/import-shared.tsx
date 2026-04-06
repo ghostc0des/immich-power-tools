@@ -1,5 +1,6 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
-import { Calendar, Loader2, Images, User, Clock } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Calendar, Loader2, Images, User, Clock, CheckCircle2, XCircle, Clock3 } from "lucide-react";
 import PageLayout from "@/components/layouts/PageLayout";
 import Header from "@/components/shared/Header";
 import { Button } from "@/components/ui/button";
@@ -22,8 +23,11 @@ import {
 } from "@/components/ui/dialog";
 import { listAlbums } from "@/handlers/api/album.handler";
 import { importShared } from "@/handlers/api/import-shared.handler";
-import { createImportJob, getImportJob } from "@/handlers/api/import-jobs.handler";
+import { createImportJob, getImportJob, listImportJobs } from "@/handlers/api/import-jobs.handler";
+import ImportJobDetailDialog from "@/components/import/ImportJobDetailDialog";
+import { validatePermissions } from "@/handlers/api/validate-permissions.handler";
 import { IAlbum } from "@/types/album";
+import { AlertTriangle } from "lucide-react";
 
 interface IAlbumContributorCount {
   userId: string;
@@ -165,6 +169,22 @@ export default function ImportSharedPage() {
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobProgress, setJobProgress] = useState<{ uploaded: number; skipped: number; failed: number; total: number } | null>(null);
+  const [tagAssets, setTagAssets] = useState(true);
+  const [detailJobId, setDetailJobId] = useState<string | null>(null);
+
+  const { data: permissions } = useQuery({
+    queryKey: ["validate-permissions"],
+    queryFn: validatePermissions,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  const { data: importHistory, refetch: refetchHistory } = useQuery({
+    queryKey: ["import-jobs"],
+    queryFn: listImportJobs,
+    staleTime: 30 * 1000,
+  });
+
 
   const albumNameRef = useRef(albumNameInput);
 
@@ -215,10 +235,12 @@ export default function ImportSharedPage() {
           const failedCount = job.failedCount;
           const skippedCount = job.skippedCount;
           const uploadedCount = job.uploadedCount;
-          const bannerType: "success" | "error" = failedCount > 0 ? "error" : "success";
+          const bannerType: "success" | "error" = (failedCount > 0 || job.status === "failed") ? "error" : "success";
           let message: string;
 
-          if (!uploadedCount && skippedCount && !failedCount) {
+          if (job.status === "failed" && importData.error && typeof importData.error === "string") {
+            message = importData.error;
+          } else if (!uploadedCount && skippedCount && !failedCount) {
             message = `All ${skippedCount} assets already exist on Immich.`;
           } else if (failedCount) {
             const skippedSuffix = skippedCount ? `, ${skippedCount} skipped` : "";
@@ -234,6 +256,7 @@ export default function ImportSharedPage() {
           }
 
           setUploadBanner({ type: bannerType, message });
+          refetchHistory();
         }
       } catch (err) {
         console.error("Polling error", err);
@@ -362,7 +385,7 @@ export default function ImportSharedPage() {
         platform: "immich",
         url: sharedData.origin,
         urlConfig: { key: sharedData.key },
-        importData: { albumOptions },
+        importData: { albumOptions, tagAssets },
         assets: uploadableAssets.map((asset) => ({
           id: asset.id,
           originalFileName: asset.originalFileName,
@@ -428,7 +451,8 @@ export default function ImportSharedPage() {
                 disabled={
                   importAllLoading ||
                   importableAssetCount === 0 ||
-                  (albumImportMode === "existing-album" && !selectedAlbumId)
+                  (albumImportMode === "existing-album" && !selectedAlbumId) ||
+                  (permissions && !permissions.canUpload)
                 }
                 onClick={() => {
                   if (importAllLoading) return;
@@ -452,6 +476,12 @@ export default function ImportSharedPage() {
       />
       <div className={!sharedData ? "flex flex-1 justify-center px-4 py-6" : "flex flex-col gap-6 p-4"}>
         <section className={!sharedData ? "w-full max-w-6xl flex flex-col gap-6" : "w-full flex flex-col gap-6"}>
+          {permissions?.canUpload === false && (
+            <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              Your API key does not have permission to upload assets. Import will not work until this is fixed.
+            </div>
+          )}
           {!sharedData && (
             <Card>
               <CardHeader className="space-y-2">
@@ -484,6 +514,60 @@ export default function ImportSharedPage() {
                     {error}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {!sharedData && importHistory?.jobs && importHistory.jobs.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg">Previous imports</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="divide-y divide-border">
+                  {importHistory.jobs.map((job) => {
+                    let jobImportData: Record<string, unknown> = {};
+                    try { jobImportData = JSON.parse(job.importData); } catch { /* ignore */ }
+                    const albumOpts = jobImportData.albumOptions as { albumName?: string } | undefined;
+                    const albumName = albumOpts?.albumName;
+                    const statusIcon = job.status === "completed" ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    ) : job.status === "failed" ? (
+                      <XCircle className="h-4 w-4 text-destructive shrink-0" />
+                    ) : (
+                      <Clock3 className="h-4 w-4 text-muted-foreground shrink-0" />
+                    );
+
+                    return (
+                      <div
+                        key={job.id}
+                        className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 cursor-pointer hover:bg-muted/50 -mx-2 px-2 rounded-md transition-colors"
+                        onClick={() => setDetailJobId(job.id)}
+                      >
+                        {statusIcon}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {albumName || job.url}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {job.uploadedCount} uploaded
+                            {job.skippedCount > 0 && `, ${job.skippedCount} skipped`}
+                            {job.failedCount > 0 && `, ${job.failedCount} failed`}
+                            {" · "}
+                            {formatDate(job.createdAt)}
+                          </p>
+                        </div>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          job.status === "completed" ? "bg-emerald-500/10 text-emerald-600" :
+                          job.status === "failed" ? "bg-destructive/10 text-destructive" :
+                          "bg-muted text-muted-foreground"
+                        }`}>
+                          {job.status}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               </CardContent>
             </Card>
           )}
@@ -578,6 +662,18 @@ export default function ImportSharedPage() {
                     </SelectContent>
                   </Select>
                 )}
+
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="tag-assets"
+                    checked={tagAssets}
+                    onCheckedChange={(checked) => setTagAssets(!!checked)}
+                    disabled={importAllLoading}
+                  />
+                  <Label htmlFor="tag-assets" className="text-sm text-muted-foreground cursor-pointer">
+                    Tag imported assets with &quot;immich-power-tools&quot;
+                  </Label>
+                </div>
 
                 {importAllLoading && jobProgress && (
                   <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2">
@@ -800,6 +896,7 @@ export default function ImportSharedPage() {
           )}
         </DialogContent>
       </Dialog>
+      <ImportJobDetailDialog jobId={detailJobId} onClose={() => setDetailJobId(null)} />
     </PageLayout>
   );
 }
