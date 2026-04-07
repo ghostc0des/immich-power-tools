@@ -428,7 +428,14 @@ function WorkflowEditorInner() {
         />
         <div className="flex items-center gap-2 ml-2">
           <span className="text-xs text-muted-foreground">Enabled</span>
-          <Switch checked={enabled} onCheckedChange={setEnabled} />
+          <Switch checked={enabled} onCheckedChange={(val) => {
+            setEnabled(val);
+            if (id) {
+              updateWorkflow(id, { enabled: val } as any)
+                .then(() => hotToast.success(val ? "Workflow enabled" : "Workflow disabled"))
+                .catch(() => hotToast.error("Failed to update workflow"));
+            }
+          }} />
         </div>
 
         <div className="h-5 w-px bg-border mx-1" />

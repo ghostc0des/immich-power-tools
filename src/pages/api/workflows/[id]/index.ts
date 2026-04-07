@@ -40,10 +40,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     await appDb.update(workflows).set(updates).where(and(eq(workflows.id, id), eq(workflows.ownerId, currentUser.id)));
     const [updated] = await appDb.select().from(workflows).where(eq(workflows.id, id));
+
+    // Re-register or unregister cron schedule
+    if (enabled !== undefined || cronSchedule !== undefined) {
+      const { registerWorkflow, unregisterWorkflow } = await import("@/lib/workflow/scheduler");
+      if (updated.enabled && updated.cronSchedule) {
+        await registerWorkflow(id, updated.cronSchedule, updated.ownerId);
+      } else {
+        unregisterWorkflow(id);
+      }
+    }
+
     return res.status(200).json(updated);
   }
 
   if (req.method === "DELETE") {
+    const { unregisterWorkflow } = await import("@/lib/workflow/scheduler");
+    unregisterWorkflow(id);
     await appDb.delete(workflows).where(and(eq(workflows.id, id), eq(workflows.ownerId, currentUser.id)));
     return res.status(204).end();
   }

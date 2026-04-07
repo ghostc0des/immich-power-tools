@@ -1,12 +1,16 @@
 import { ENV } from "@/config/environment";
 import { db } from "@/config/db";
+import { appDb } from "@/db";
+import { settings } from "@/db/schema/settings.schema";
 import { exif } from "@/schema";
 import { assets } from "@/schema/assets.schema";
 import { person } from "@/schema/person.schema";
 import { assetFaces } from "@/schema/assetFaces.schema";
-import { eq, inArray, sql, desc } from "drizzle-orm";
+import { eq, and, inArray, sql, desc } from "drizzle-orm";
 import { IUser } from "@/types/user";
 import { getUserHeaders } from "@/helpers/user.helper";
+
+export const WORKFLOW_API_KEY_SETTING = "workflow_api_key";
 
 interface ActionResult {
   action: string;
@@ -16,13 +20,28 @@ interface ActionResult {
   error?: string;
 }
 
+async function getWorkflowApiKey(ownerId: string): Promise<string | null> {
+  const [row] = await appDb
+    .select()
+    .from(settings)
+    .where(and(eq(settings.key, WORKFLOW_API_KEY_SETTING), eq(settings.ownerId, ownerId)));
+  return row?.value || null;
+}
+
 async function immichFetch(path: string, method: string, body: any, user: IUser): Promise<any> {
+  const workflowApiKey = await getWorkflowApiKey(user.id);
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (workflowApiKey) {
+    headers["x-api-key"] = workflowApiKey;
+  } else {
+    const userHeaders = getUserHeaders(user);
+    Object.assign(headers, userHeaders);
+  }
+
   const res = await fetch(`${ENV.IMMICH_URL}/api${path}`, {
     method,
-    headers: {
-      ...getUserHeaders(user),
-      "Content-Type": "application/json",
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {

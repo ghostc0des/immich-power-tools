@@ -6,5 +6,8 @@ export async function register() {
 
     const { resumePendingJobs } = await import("./workers/import/runner");
     await resumePendingJobs();
+
+    const { loadAllScheduledWorkflows } = await import("./lib/workflow/scheduler");
+    await loadAllScheduledWorkflows();
   }
 }
