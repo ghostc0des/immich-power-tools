@@ -28,7 +28,7 @@ export default function TagMissingLocationOSMSearchAndAdd(
 ) {
   const { toast } = useToast();
   const [searchedPlaces, setSearchedPlaces] = useState<IPlace[] | null>(null);
-  const searchTimer = useRef<NodeJS.Timeout>();
+  const searchTimer = useRef<NodeJS.Timeout>(undefined);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<IPlace | null>(null);
