@@ -1,4 +1,4 @@
-import { Copy, GalleryHorizontal, GalleryVerticalEnd, Image as ImageIcon, MapPin, MapPinX, PackageSearch, Rewind, Search, Settings, Share2, User, Video } from "lucide-react";
+import { Copy, GalleryHorizontal, GalleryVerticalEnd, Image as ImageIcon, MapPin, MapPinX, PackageSearch, Rewind, Search, Settings, Share2, User, Video, Workflow } from "lucide-react";
 
 export const sidebarNavs = [
   // {
@@ -58,6 +58,11 @@ export const sidebarNavs = [
     title: "Bulk Duplicate Finder",
     link: "/assets/bulk-duplicate-finder",
     icon: <Copy className="h-4 w-4" />,
+  },
+  {
+    title: "Workflows",
+    link: "/workflows",
+    icon: <Workflow className="h-4 w-4" />,
   },
   {
     title: "Orphan Finder",

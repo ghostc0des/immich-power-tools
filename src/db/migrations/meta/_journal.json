@@ -15,6 +15,20 @@
       "when": 1775227109706,
       "tag": "0001_rainy_jamie_braddock",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1775560183481,
+      "tag": "0002_thin_triton",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1775567654903,
+      "tag": "0003_spooky_lockheed",
+      "breakpoints": true
     }
   ]
 }

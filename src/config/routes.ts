@@ -103,3 +103,16 @@ export const VALIDATE_PERMISSIONS_PATH = BASE_API_ENDPOINT + "/validate-permissi
 // Import Jobs (queue)
 export const IMPORT_JOBS_PATH = BASE_API_ENDPOINT + "/import-jobs";
 export const IMPORT_JOB_PATH = (jobId: string) => BASE_API_ENDPOINT + "/import-jobs/" + jobId;
+
+// Workflows
+export const LIST_WORKFLOWS_PATH = BASE_API_ENDPOINT + "/workflows";
+export const CREATE_WORKFLOW_PATH = BASE_API_ENDPOINT + "/workflows";
+export const GET_WORKFLOW_PATH = (id: string) => BASE_API_ENDPOINT + "/workflows/" + id;
+export const UPDATE_WORKFLOW_PATH = (id: string) => BASE_API_ENDPOINT + "/workflows/" + id;
+export const DELETE_WORKFLOW_PATH = (id: string) => BASE_API_ENDPOINT + "/workflows/" + id;
+export const SAVE_WORKFLOW_GRAPH_PATH = (id: string) => BASE_API_ENDPOINT + "/workflows/" + id + "/graph";
+export const RUN_WORKFLOW_PATH = (id: string) => BASE_API_ENDPOINT + "/workflows/" + id + "/run";
+export const WORKFLOW_RUNS_PATH = (id: string) => BASE_API_ENDPOINT + "/workflows/" + id + "/runs";
+export const EXPORT_WORKFLOW_PATH = (id: string) => BASE_API_ENDPOINT + "/workflows/" + id + "/export";
+export const IMPORT_WORKFLOW_PATH = BASE_API_ENDPOINT + "/workflows/import";
+export const WORKFLOW_RUN_DETAIL_PATH = (id: string, runId: string) => BASE_API_ENDPOINT + "/workflows/" + id + "/runs/" + runId;
