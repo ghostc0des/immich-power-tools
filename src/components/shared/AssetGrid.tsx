@@ -1,9 +1,11 @@
 import "yet-another-react-lightbox/styles.css";
+import "react-photo-album/rows.css";
 
 import { IAsset } from '@/types/asset';
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useState, useCallback } from 'react'
 import Lightbox from 'yet-another-react-lightbox';
-import { Gallery } from "react-grid-gallery";
+import { RowsPhotoAlbum } from "react-photo-album";
+import type { Photo, RenderImageContext, RenderImageProps } from "react-photo-album";
 import LazyGridImage from "../ui/lazy-grid-image";
 import Download from "yet-another-react-lightbox/plugins/download";
 import Video from "yet-another-react-lightbox/plugins/video";
@@ -16,6 +18,12 @@ import { toast } from '@/components/ui/use-toast';
 
 const AssetInfoPanel = dynamic(() => import('@/components/asset-info/AssetInfoPanel'), { ssr: false });
 
+export interface AssetPhoto extends Photo {
+  id: string;
+  isVideo: boolean;
+  duration?: string;
+  isSelected: boolean;
+}
 
 interface AssetGridProps {
   assets: IAsset[];
@@ -99,7 +107,7 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
   }), [assets, selectedIds, updateContext]);
 
 
-  const handleClick = (index: number, asset: IAsset, event: React.MouseEvent<HTMLElement>) => {
+  const handleClick = (index: number, asset: AssetPhoto, event: React.MouseEvent) => {
     if (selectedIds.length > 0) {
       handleSelect(index, asset, event);
     } else {
@@ -107,7 +115,7 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
     }
   }
 
-  const handleSelect = (_idx: number, asset: IAsset, event: React.MouseEvent<HTMLElement>) => {
+  const handleSelect = (_idx: number, asset: AssetPhoto, event: React.MouseEvent) => {
 
     event.stopPropagation();
     const isPresent = selectedIds.includes(asset.id);
@@ -157,26 +165,17 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
     }));
   }, [assets]);
 
-  const images = useMemo(() => {
+  const images: AssetPhoto[] = useMemo(() => {
     return assets.map((p) => ({
       ...p,
       src: p.url as string,
       original: p.previewUrl as string,
-      width: p.exifImageWidth / 10 as number,
-      height: p.exifImageHeight / 10 as number,
+      width: p.exifImageWidth as number,
+      height: p.exifImageHeight as number,
       orientation: 1,
       isSelected: selectedIds.includes(p.id),
       isVideo: p.type === "VIDEO",
-      tags: [
-        {
-          title: "Immich Link",
-          value: (
-            <a href={exImmichUrl + "/photos/" + p.id} target="_blank" rel="noopener noreferrer">
-              Open in Immich
-            </a>
-          ),
-        },
-      ],
+      duration: p.duration != null ? String(p.duration) : undefined,
     }));
   }, [assets, selectedIds, exImmichUrl]);
 
@@ -192,6 +191,17 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
   }, [images]);
+
+  const renderImage = (props: RenderImageProps, context: RenderImageContext<AssetPhoto>) => {
+    return (
+      <LazyGridImage
+        imageProps={props}
+        photo={context.photo}
+        width={context.width}
+        height={context.height}
+      />
+    );
+  };
 
   const handleOpenInImmich = useCallback(() => {
     if (currentAsset) {
@@ -287,12 +297,25 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
           },
         }}
       />
-      <Gallery
-        images={images}
-        onClick={handleClick}
-        enableImageSelection={selectable}
-        thumbnailImageComponent={LazyGridImage}
-        onSelect={handleSelect}
+      <RowsPhotoAlbum
+        photos={images}
+        targetRowHeight={150}
+        rowConstraints={{ singleRowMaxHeight: 300 }}
+        onClick={({ index, event, photo }) => handleClick(index, photo, event)}
+        render={{
+          image: renderImage,
+          extras: (_, { photo }) => (
+            <a
+              href={exImmichUrl + "/photos/" + photo.id}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute bottom-1 left-1 bg-black/60 text-yellow-300 text-xs px-2 py-0.5 rounded"
+              onClick={(e) => e.stopPropagation()}
+            >
+              Open in Immich
+            </a>
+          ),
+        }}
       />
     </div>
   );
