@@ -23,9 +23,10 @@ import { IWorkflowWithDetails } from "@/types/workflow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { toast } from "@/components/ui/use-toast";
+import hotToast from "react-hot-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ASSET_THUMBNAIL_PATH } from "@/config/routes";
 import { IWorkflowRun } from "@/types/workflow";
@@ -92,6 +93,124 @@ function flowEdgeToDb(e: Edge) {
   };
 }
 
+const intervalOptions = [
+  { label: "Minutes", value: "minutes", cron: (n: number) => `*/${n} * * * *` },
+  { label: "Hours", value: "hours", cron: (n: number) => `0 */${n} * * *` },
+  { label: "Days", value: "days", cron: (n: number) => `0 0 */${n} * *` },
+  { label: "Weeks", value: "weeks", cron: (n: number) => `0 0 * * ${n === 1 ? '0' : `0/${n}`}` },
+];
+
+function parseCronToForm(cron: string): { every: number; interval: string } {
+  if (!cron) return { every: 0, interval: "hours" };
+  const parts = cron.split(" ");
+  if (parts.length !== 5) return { every: 0, interval: "hours" };
+
+  // */N * * * * → every N minutes
+  if (parts[0].startsWith("*/") && parts[1] === "*") {
+    return { every: parseInt(parts[0].slice(2)) || 0, interval: "minutes" };
+  }
+  // 0 */N * * * → every N hours
+  if (parts[0] === "0" && parts[1].startsWith("*/")) {
+    return { every: parseInt(parts[1].slice(2)) || 0, interval: "hours" };
+  }
+  // 0 0 */N * * → every N days
+  if (parts[0] === "0" && parts[1] === "0" && parts[2].startsWith("*/")) {
+    return { every: parseInt(parts[2].slice(2)) || 0, interval: "days" };
+  }
+  return { every: 0, interval: "hours" };
+}
+
+function SchedulePopover({ value, onChange, workflowId }: { value: string; onChange: (cron: string) => void; workflowId?: string }) {
+  const parsed = parseCronToForm(value);
+  const [every, setEvery] = useState(parsed.every);
+  const [interval, setInterval] = useState(parsed.interval);
+
+  useEffect(() => {
+    const p = parseCronToForm(value);
+    setEvery(p.every);
+    setInterval(p.interval);
+  }, [value]);
+
+  const handleApply = () => {
+    if (every <= 0) {
+      onChange("");
+      return;
+    }
+    const opt = intervalOptions.find((o) => o.value === interval);
+    if (opt) {
+      const cron = opt.cron(every);
+      onChange(cron);
+      if (workflowId) {
+        updateWorkflow(workflowId, { cronSchedule: cron } as any)
+          .then(() => hotToast.success(`Schedule set — every ${every} ${interval}`))
+          .catch(() => hotToast.error("Failed to save schedule"));
+      }
+    }
+  };
+
+  const handleClear = () => {
+    setEvery(0);
+    setInterval("hours");
+    onChange("");
+    if (workflowId) {
+      updateWorkflow(workflowId, { cronSchedule: null } as any)
+        .then(() => hotToast.success("Schedule cleared"))
+        .catch(() => hotToast.error("Failed to clear schedule"));
+    }
+  };
+
+  const summaryLabel = value
+    ? `Every ${parseCronToForm(value).every} ${parseCronToForm(value).interval}`
+    : "Schedule";
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant={value ? "secondary" : "ghost"} size="sm" className="h-8">
+          <Clock className="h-3.5 w-3.5 mr-1" />
+          {summaryLabel}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64" align="start">
+        <div className="space-y-3">
+          <Label className="text-xs font-medium">Run every</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              className="h-8 text-sm w-20"
+              type="number"
+              min={0}
+              value={every || ""}
+              onChange={(e) => setEvery(parseInt(e.target.value) || 0)}
+              placeholder="0"
+            />
+            <Select value={interval} onValueChange={setInterval}>
+              <SelectTrigger className="h-8 text-sm flex-1"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {intervalOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {every > 0 && (
+            <p className="text-[10px] text-muted-foreground font-mono">
+              {intervalOptions.find((o) => o.value === interval)?.cron(every)}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleApply} disabled={every <= 0}>
+              Apply
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleClear}>
+              Clear
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function WorkflowEditorInner() {
   const router = useRouter();
   const { id } = router.query as { id: string };
@@ -128,7 +247,7 @@ function WorkflowEditorInner() {
         setEdges(data.edges.map(dbEdgeToFlowEdge));
       })
       .catch(() => {
-        toast({ title: "Error", description: "Failed to load workflow", variant: "destructive" });
+        hotToast.error("Failed to load workflow");
       })
       .finally(() => setLoading(false));
 
@@ -200,9 +319,9 @@ function WorkflowEditorInner() {
         enabled,
         cronSchedule: cronSchedule || null,
       } as any);
-      toast({ title: "Saved", description: "Workflow saved" });
+      hotToast.success("Workflow saved");
     } catch {
-      toast({ title: "Error", description: "Failed to save workflow", variant: "destructive" });
+      hotToast.error("Failed to save workflow");
     }
     setSaving(false);
   };
@@ -210,16 +329,14 @@ function WorkflowEditorInner() {
   const handleRun = async (mode: "manual" | "debug" = "manual") => {
     if (!id) return;
     setRunning(true);
+    hotToast(mode === "debug" ? "Starting debug..." : "Running workflow...");
     try {
       await runWorkflow(id, mode);
-      toast({
-        title: mode === "debug" ? "Debug Complete" : "Run Complete",
-        description: mode === "debug" ? "Dry run finished — no actions were executed" : "Workflow execution finished",
-      });
+      hotToast.success(mode === "debug" ? "Debug complete — no actions executed" : "Workflow run complete");
       getWorkflowRuns(id).then(setRuns).catch(() => {});
       setShowRuns(true);
     } catch {
-      toast({ title: "Error", description: "Failed to run workflow", variant: "destructive" });
+      hotToast.error("Failed to run workflow");
     }
     setRunning(false);
   };
@@ -317,28 +434,7 @@ function WorkflowEditorInner() {
         <div className="h-5 w-px bg-border mx-1" />
 
         {/* Schedule config */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant={cronSchedule ? "secondary" : "ghost"} size="sm" className="h-8">
-              <Clock className="h-3.5 w-3.5 mr-1" />
-              {cronSchedule ? "Scheduled" : "Schedule"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-72" align="start">
-            <div className="space-y-2">
-              <Label className="text-xs">Cron Expression</Label>
-              <Input
-                className="h-8 text-sm font-mono"
-                placeholder="0 */6 * * *"
-                value={cronSchedule}
-                onChange={(e) => setCronSchedule(e.target.value)}
-              />
-              <p className="text-[10px] text-muted-foreground">
-                e.g. <code>0 */6 * * *</code> (every 6h), <code>0 9 * * 1</code> (Mon 9am). Leave empty to disable.
-              </p>
-            </div>
-          </PopoverContent>
-        </Popover>
+        <SchedulePopover value={cronSchedule} onChange={setCronSchedule} workflowId={id} />
 
         {/* Webhook URL */}
         <Popover>
