@@ -26,14 +26,14 @@ export default function AlbumPhotosChart() {
 
   return (
     <Card
-      title="Album Distribution"
-      description="Distribution of photos in and out of albums"
+      title="Album Coverage"
+      description="In albums vs unorganized"
     >
-      <PieChart 
-        data={chartData} 
-        loading={loading} 
+      <PieChart
+        data={chartData}
+        loading={loading}
         errorMessage={errorMessage}
-      />         
+      />
     </Card>
   );
 }

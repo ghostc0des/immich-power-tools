@@ -27,13 +27,13 @@ export default function PeopleNamesChart() {
   return (
     <Card
       title="People Names"
-      description="Distribution of people with and without names"
+      description="Named vs unnamed people"
     >
-      <PieChart 
-        data={chartData} 
-        loading={loading} 
+      <PieChart
+        data={chartData}
+        loading={loading}
         errorMessage={errorMessage}
-      />         
+      />
     </Card>
   );
 }
