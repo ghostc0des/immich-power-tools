@@ -7,7 +7,7 @@ const respondWithError = (res: NextApiResponse, status: number, message: string)
 const ALLOWED_SIZES = new Set(["thumbnail", "preview"]);
 
 const validateParams = (req: NextApiRequest) => {
-  const { origin, assetId, key, thumbhash, size } = req.query;
+  const { origin, assetId, key, thumbhash, size, platform } = req.query;
 
   if (!origin || Array.isArray(origin)) {
     return { error: "Query parameter 'origin' is required" };
@@ -30,6 +30,8 @@ const validateParams = (req: NextApiRequest) => {
     return { error: "Query parameter 'size' must be either 'thumbnail' or 'preview'" };
   }
 
+  const resolvedPlatform = typeof platform === "string" ? platform : "immich";
+
   try {
     const parsedOrigin = new URL(origin);
     return {
@@ -37,6 +39,7 @@ const validateParams = (req: NextApiRequest) => {
       assetId,
       key,
       size: resolvedSize,
+      platform: resolvedPlatform,
       thumbhash: typeof thumbhash === "string" ? thumbhash : undefined,
     };
   } catch (_err) {
@@ -55,20 +58,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return respondWithError(res, 400, params.error as string);
   }
 
-  const search = new URLSearchParams({ key: params.key, size: params.size });
-  if (params.thumbhash) {
-    search.set("c", params.thumbhash);
-  }
-
   try {
-    const response = await fetch(
-      `${params.origin}/api/assets/${params.assetId}/thumbnail?${search.toString()}`,
-      {
-        headers: {
-          accept: "image/*",
-        },
+    let targetUrl: string;
+
+    if (params.platform === "nextcloud") {
+      // Nextcloud public preview endpoint
+      const dimensions = params.size === "preview" ? { x: 1080, y: 1080 } : { x: 250, y: 250 };
+      const previewParams = new URLSearchParams({
+        file: `/${params.assetId}`,
+        x: String(dimensions.x),
+        y: String(dimensions.y),
+        mimeFallback: "true",
+        a: "0",
+      });
+      targetUrl = `${params.origin}/apps/files_sharing/publicpreview/${params.key}?${previewParams.toString()}`;
+    } else {
+      // Immich thumbnail endpoint
+      const search = new URLSearchParams({ key: params.key, size: params.size });
+      if (params.thumbhash) {
+        search.set("c", params.thumbhash);
       }
-    );
+      targetUrl = `${params.origin}/api/assets/${params.assetId}/thumbnail?${search.toString()}`;
+    }
+
+    const response = await fetch(targetUrl, {
+      headers: {
+        accept: "image/*",
+      },
+    });
 
     if (!response.ok) {
       return respondWithError(res, response.status, "Failed to fetch thumbnail");

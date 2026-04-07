@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { detectNextcloud, checkPasswordProtection, listNextcloudFiles } from "./import-shared/nextcloud";
 
 interface IAlbumContributorCount {
   userId: string;
@@ -83,6 +84,7 @@ interface IImportSharedAlbum {
 }
 
 interface IImportSharedResponse {
+  platform: "immich" | "nextcloud";
   link: string;
   origin: string;
   key: string;
@@ -165,9 +167,89 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return respondWithError(res, 400, "A shared album link is required");
   }
 
+  // Detect platform from the URL
+  const nextcloud = detectNextcloud(link);
+
+  if (nextcloud) {
+    // ── Nextcloud flow ──
+    try {
+      if (!password) {
+        const isProtected = await checkPasswordProtection(nextcloud.baseUrl, nextcloud.token);
+        if (isProtected) {
+          return res.status(401).json({ error: "PASSWORD_REQUIRED" });
+        }
+      }
+
+      const { metadata, files } = await listNextcloudFiles(nextcloud.baseUrl, nextcloud.token, password ?? "");
+
+      const assets: IImportSharedAsset[] = files.map((file) => ({
+        id: file.relativePath,
+        originalFileName: file.fileName,
+        type: file.type,
+        fileCreatedAt: file.lastModified ?? null,
+        localDateTime: null,
+        description: null,
+        location: null,
+        thumbhash: file.blurhash ?? null,
+        fileSizeInByte: file.size || null,
+      }));
+
+      // Derive date range from file modification dates
+      const dates = files
+        .map((f) => f.lastModified ? new Date(f.lastModified).getTime() : NaN)
+        .filter((t) => !Number.isNaN(t));
+      const startDate = dates.length > 0 ? new Date(Math.min(...dates)).toISOString() : null;
+      const endDate = dates.length > 0 ? new Date(Math.max(...dates)).toISOString() : null;
+
+      const albumName = metadata.displayName || "Nextcloud Share";
+      const owner = metadata.ownerId
+        ? { name: metadata.ownerId, email: null }
+        : null;
+
+      const responseBody: IImportSharedResponse = {
+        platform: "nextcloud",
+        link: link.trim(),
+        origin: nextcloud.baseUrl,
+        key: nextcloud.token,
+        sharedLink: {
+          id: nextcloud.token,
+          type: "FOLDER",
+          createdAt: new Date().toISOString(),
+          expiresAt: null,
+          allowUpload: false,
+          allowDownload: true,
+          showMetadata: true,
+        },
+        album: {
+          albumName,
+          assetCount: assets.length,
+          owner,
+          description: null,
+          startDate,
+          endDate,
+          shared: true,
+          hasSharedLink: true,
+          lastModifiedAssetTimestamp: endDate,
+          order: null,
+          contributorCounts: [],
+          assets,
+        },
+      };
+
+      return res.status(200).json(responseBody);
+    } catch (error: any) {
+      if (error?.code === "PASSWORD_REQUIRED") {
+        return res.status(401).json({ error: "PASSWORD_REQUIRED" });
+      }
+      console.error("Nextcloud import shared error", error);
+      return respondWithError(res, 500, error?.message ?? "Failed to fetch Nextcloud share");
+    }
+  }
+
+  // ── Immich flow ──
   const parsed = parseSharedLink(link);
   if (!parsed) {
-    return respondWithError(res, 400, "Invalid Immich share link");
+    return respondWithError(res, 400, "Invalid share link. Supported: Immich or Nextcloud share URLs.");
   }
 
   const authQuery = password
@@ -216,6 +298,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const responseBody: IImportSharedResponse = {
+      platform: "immich",
       link: parsed.original,
       origin: parsed.origin,
       key: parsed.key,

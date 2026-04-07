@@ -84,6 +84,7 @@ interface IImportSharedAlbum {
 }
 
 interface IImportSharedResponse {
+  platform: "immich" | "nextcloud";
   link: string;
   origin: string;
   key: string;
@@ -295,7 +296,10 @@ export default function ImportSharedPage() {
       setImportAllLoading(false);
       setAlbumImportMode("album");
       setNeedsPassword(false);
-      setShareLinkPassword("");
+      // Keep password for Nextcloud (needed for import job and video proxy)
+      if (payload.platform !== "nextcloud") {
+        setShareLinkPassword("");
+      }
     } catch (err: any) {
       const errorCode = err?.error ?? err?.message ?? "Unexpected error";
       if (errorCode === "PASSWORD_REQUIRED") {
@@ -321,6 +325,7 @@ export default function ImportSharedPage() {
       origin: sharedData.origin,
       key: sharedData.key,
       size: "thumbnail",
+      platform: sharedData.platform,
     });
     if (asset.thumbhash) params.set("thumbhash", asset.thumbhash);
     return `/api/import-shared/thumbnail?${params.toString()}`;
@@ -332,8 +337,12 @@ export default function ImportSharedPage() {
       assetId: asset.id,
       origin: sharedData.origin,
       key: sharedData.key,
+      platform: sharedData.platform,
     });
     if (asset.thumbhash) params.set("thumbhash", asset.thumbhash);
+    if (sharedData.platform === "nextcloud" && shareLinkPassword) {
+      params.set("password", shareLinkPassword);
+    }
     return `/api/import-shared/video?${params.toString()}`;
   };
 
@@ -344,6 +353,7 @@ export default function ImportSharedPage() {
       origin: sharedData.origin,
       key: sharedData.key,
       size: "preview",
+      platform: sharedData.platform,
     });
     if (asset.thumbhash) params.set("thumbhash", asset.thumbhash);
     return `/api/import-shared/thumbnail?${params.toString()}`;
@@ -377,10 +387,16 @@ export default function ImportSharedPage() {
     setUploadBanner(null);
     setImportAllLoading(true);
     try {
+      const isNextcloud = sharedData.platform === "nextcloud";
+      const urlConfig: Record<string, string> = { key: sharedData.key };
+      if (isNextcloud && shareLinkPassword) {
+        urlConfig.password = shareLinkPassword;
+      }
+
       const job = await createImportJob({
-        platform: "immich",
+        platform: sharedData.platform,
         url: sharedData.origin,
-        urlConfig: { key: sharedData.key },
+        urlConfig,
         importData: { albumOptions, tagAssets },
         assets: uploadableAssets.map((asset) => ({
           id: asset.id,
@@ -391,6 +407,7 @@ export default function ImportSharedPage() {
           duration: asset.duration ?? null,
           isFavorite: asset.isFavorite ?? false,
           isArchived: asset.isArchived ?? false,
+          ...(isNextcloud ? { relativePath: asset.id } : {}),
         })),
       });
       setActiveJobId(job.jobId);
@@ -454,7 +471,7 @@ export default function ImportSharedPage() {
             <div className="space-y-2">
               <h1 className="text-2xl font-bold tracking-tight">Import a shared album</h1>
               <p className="text-sm text-muted-foreground">
-                Paste a public shared link from another Immich instance to import its assets into yours.
+                Paste a public shared link from Immich or Nextcloud to import its assets into your Immich instance.
               </p>
             </div>
 
@@ -471,7 +488,7 @@ export default function ImportSharedPage() {
                         setShareLinkPassword("");
                       }
                     }}
-                    placeholder="https://demo.immich.app/share/..."
+                    placeholder="Immich or Nextcloud share URL"
                     type="url"
                     required
                     className="pl-9"
