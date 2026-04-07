@@ -30,10 +30,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { ASSET_THUMBNAIL_PATH } from "@/config/routes";
 import { IWorkflowRun } from "@/types/workflow";
-import { ArrowLeft, Play, Save, Clock, Webhook, History, ChevronUp, ChevronDown, Bug } from "lucide-react";
+import { ArrowLeft, Play, Save, Clock, Webhook, History, ChevronUp, ChevronDown, Bug, TriangleAlert } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
 import Loader from "@/components/ui/loader";
+import API from "@/lib/api";
 
 function generateId() {
   return Math.random().toString(36).substring(2, 15);
@@ -229,6 +230,7 @@ function WorkflowEditorInner() {
   const [runs, setRuns] = useState<IWorkflowRun[]>([]);
   const [showRuns, setShowRuns] = useState(false);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([] as Node[]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([] as Edge[]);
@@ -252,6 +254,9 @@ function WorkflowEditorInner() {
       .finally(() => setLoading(false));
 
     getWorkflowRuns(id).then(setRuns).catch(() => {});
+    API.get("/api/settings/kv/workflow_api_key")
+      .then((data) => setHasApiKey(!!data?.value))
+      .catch(() => setHasApiKey(false));
   }, [id]);
 
   const onConnect = useCallback((connection: Connection) => {
@@ -465,6 +470,46 @@ function WorkflowEditorInner() {
             </div>
           </PopoverContent>
         </Popover>
+
+        {/* API Key warning */}
+        {hasApiKey === false && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 text-yellow-500 hover:text-yellow-600">
+                <TriangleAlert className="h-4 w-4 mr-1" />
+                <span className="text-xs">API Key Missing</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80" align="end">
+              <div className="space-y-3">
+                <div className="flex items-start gap-2">
+                  <TriangleAlert className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">Workflow API Key Not Configured</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Workflows need a dedicated Immich API key to execute actions like creating albums, favoriting assets, and managing tags.
+                    </p>
+                  </div>
+                </div>
+                <div className="border rounded p-2 bg-muted/50">
+                  <p className="text-xs font-medium mb-1">Required Permissions:</p>
+                  <ul className="text-[10px] text-muted-foreground space-y-0.5">
+                    <li>- <strong>asset.read</strong> — Query and filter assets</li>
+                    <li>- <strong>asset.update</strong> — Favorite, archive, update metadata</li>
+                    <li>- <strong>album.create</strong> — Create new albums</li>
+                    <li>- <strong>album.update</strong> — Add/remove assets from albums</li>
+                    <li>- <strong>tag.create</strong> — Create and assign tags</li>
+                  </ul>
+                </div>
+                <Link href="/settings" className="block">
+                  <Button size="sm" className="w-full h-7 text-xs">
+                    Configure in Settings
+                  </Button>
+                </Link>
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => handleRun("debug")} disabled={running}>
