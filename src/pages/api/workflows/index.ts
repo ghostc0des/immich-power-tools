@@ -1,7 +1,7 @@
 import { appDb } from "@/db";
-import { workflows } from "@/db/schema/workflows.schema";
+import { workflows, workflowNodes, workflowRuns } from "@/db/schema/workflows.schema";
 import { getCurrentUser } from "@/handlers/serverUtils/user.utils";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, count, sql } from "drizzle-orm";
 import { NextApiRequest, NextApiResponse } from "next";
 import { randomUUID } from "crypto";
 
@@ -15,7 +15,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from(workflows)
       .where(eq(workflows.ownerId, currentUser.id))
       .orderBy(desc(workflows.updatedAt));
-    return res.status(200).json(rows);
+
+    // Enrich with node counts and last run info
+    const enriched = await Promise.all(rows.map(async (w) => {
+      const nodes = await appDb
+        .select({ type: workflowNodes.type })
+        .from(workflowNodes)
+        .where(eq(workflowNodes.workflowId, w.id));
+
+      const [lastRun] = await appDb
+        .select()
+        .from(workflowRuns)
+        .where(eq(workflowRuns.workflowId, w.id))
+        .orderBy(desc(workflowRuns.startedAt))
+        .limit(1);
+
+      const [runCountRow] = await appDb
+        .select({ count: count() })
+        .from(workflowRuns)
+        .where(eq(workflowRuns.workflowId, w.id));
+
+      return {
+        ...w,
+        nodeCount: nodes.length,
+        triggerCount: nodes.filter(n => n.type === "trigger").length,
+        actionCount: nodes.filter(n => n.type === "action").length,
+        totalRuns: runCountRow?.count || 0,
+        lastRun: lastRun || null,
+      };
+    }));
+
+    return res.status(200).json(enriched);
   }
 
   if (req.method === "POST") {
