@@ -301,6 +301,8 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
         photos={images}
         targetRowHeight={150}
         rowConstraints={{ singleRowMaxHeight: 300 }}
+        spacing={2}
+        padding={0}
         onClick={({ index, event, photo }) => handleClick(index, photo, event)}
         render={{
           image: renderImage,
@@ -309,10 +311,10 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
               href={exImmichUrl + "/photos/" + photo.id}
               target="_blank"
               rel="noopener noreferrer"
-              className="absolute bottom-1 left-1 bg-black/60 text-yellow-300 text-xs px-2 py-0.5 rounded"
+              className="absolute bottom-1 left-1 bg-black/60 p-1 rounded"
               onClick={(e) => e.stopPropagation()}
             >
-              Open in Immich
+              <ExternalLink className="h-3.5 w-3.5 text-white" />
             </a>
           ),
         }}
