@@ -27,13 +27,13 @@ export default function GeoPhotosChart() {
   return (
     <Card
       title="Geo Data"
-      description="Distribution of photos with and without geo data"
+      description="Photos with vs without location"
     >
-      <PieChart 
-        data={chartData} 
-        loading={loading} 
+      <PieChart
+        data={chartData}
+        loading={loading}
         errorMessage={errorMessage}
-      />         
+      />
     </Card>
   );
 }

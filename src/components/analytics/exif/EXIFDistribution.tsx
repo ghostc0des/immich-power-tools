@@ -1,5 +1,6 @@
 import { Card } from "@/components/ui/card";
-import PieChart, { IPieChartData } from "@/components/ui/pie-chart";
+import HorizontalBarChart from "@/components/ui/horizontal-bar-chart";
+import { IBarChartData } from "@/components/ui/horizontal-bar-chart";
 import { getExifDistribution, ISupportedEXIFColumns } from "@/handlers/api/analytics.handler";
 import React, { useEffect, useState } from "react";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
@@ -14,14 +15,20 @@ export interface IEXIFDistributionProps {
 export default function EXIFDistribution(
   { column, title, description, tooltipValueFormatter }: IEXIFDistributionProps
 ) {
-  const [chartData, setChartData] = useState<IPieChartData[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [chartData, setChartData] = useState<IBarChartData[]>([]);
+  const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fetchData = async () => {
-    return getExifDistribution(column)
-      .then(setChartData)
-      .finally(() => setLoading(false));
+    setLoading(true);
+    try {
+      const data = await getExifDistribution(column);
+      setChartData(data);
+    } catch (error: any) {
+      setErrorMessage(error?.message || "Failed to load data");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -29,11 +36,13 @@ export default function EXIFDistribution(
   }, [column]);
 
   return (
-    <Card
-      title={title}
-      description={description}
-    >
-      <PieChart data={chartData} loading={loading} errorMessage={errorMessage} tooltipValueFormatter={tooltipValueFormatter}  />         
+    <Card title={title} description={description}>
+      <HorizontalBarChart
+        data={chartData}
+        loading={loading}
+        errorMessage={errorMessage}
+        tooltipValueFormatter={tooltipValueFormatter}
+      />
     </Card>
   );
 }

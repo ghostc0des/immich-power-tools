@@ -1,15 +1,12 @@
 import Link from "next/link";
 
-import { sidebarNavs } from "@/config/constants/sidebarNavs";
+import { sidebarGroups } from "@/config/constants/sidebarNavs";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/router";
 
 import dynamic from "next/dynamic";
-import ProfileInfo from "./ProfileInfo";
 
-const ThemeSwitcher = dynamic(() => import("@/components/shared/ThemeSwitcher"), {
-  ssr: false,
-});
+const ProfileInfo = dynamic(() => import("./ProfileInfo"), { ssr: false });
 
 export default function Sidebar() {
   const router = useRouter();
@@ -29,24 +26,32 @@ export default function Sidebar() {
             />
             <span className="">Immich Power Tools</span>
           </Link>
-          <ThemeSwitcher />
         </div>
-        <div className="flex-1">
-          <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
-            {sidebarNavs.map((nav) => (
-              <Link
-                key={nav.title}
-                href={nav.link}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg py-2 text-muted-foreground transition-all hover:text-primary",
-                  {
-                    "text-primary": pathname === nav.link,
-                  }
-                )}
-              >
-                {nav.icon}
-                {nav.title}
-              </Link>
+        <div className="flex-1 overflow-y-auto">
+          <nav className="px-2 lg:px-4 space-y-4 py-2">
+            {sidebarGroups.map((group) => (
+              <div key={group.label}>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 px-3 mb-1">
+                  {group.label}
+                </p>
+                <div className="space-y-0.5">
+                  {group.items.map((nav) => (
+                    <Link
+                      key={nav.title}
+                      href={nav.link}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg py-1.5 px-3 text-sm text-muted-foreground transition-all hover:text-primary",
+                        {
+                          "text-primary bg-primary/5 font-medium": pathname === nav.link,
+                        }
+                      )}
+                    >
+                      {nav.icon}
+                      {nav.title}
+                    </Link>
+                  ))}
+                </div>
+              </div>
             ))}
           </nav>
         </div>

@@ -1,0 +1,187 @@
+import { ENV } from "@/config/environment";
+import { db } from "@/config/db";
+import { appDb } from "@/db";
+import { settings } from "@/db/schema/settings.schema";
+import { exif } from "@/schema";
+import { assets } from "@/schema/assets.schema";
+import { person } from "@/schema/person.schema";
+import { assetFaces } from "@/schema/assetFaces.schema";
+import { eq, and, inArray, sql, desc } from "drizzle-orm";
+import { IUser } from "@/types/user";
+import { getUserHeaders } from "@/helpers/user.helper";
+
+export const WORKFLOW_API_KEY_SETTING = "workflow_api_key";
+
+interface ActionResult {
+  action: string;
+  assetsProcessed: number;
+  albumId?: string;
+  albumName?: string;
+  error?: string;
+}
+
+async function getWorkflowApiKey(ownerId: string): Promise<string | null> {
+  const [row] = await appDb
+    .select()
+    .from(settings)
+    .where(and(eq(settings.key, WORKFLOW_API_KEY_SETTING), eq(settings.ownerId, ownerId)));
+  return row?.value || null;
+}
+
+async function immichFetch(path: string, method: string, body: any, user: IUser): Promise<any> {
+  const workflowApiKey = await getWorkflowApiKey(user.id);
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (workflowApiKey) {
+    headers["x-api-key"] = workflowApiKey;
+  } else {
+    const userHeaders = getUserHeaders(user);
+    Object.assign(headers, userHeaders);
+  }
+
+  const res = await fetch(`${ENV.IMMICH_URL}/api${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Immich API error ${res.status}: ${text}`);
+  }
+  const contentType = res.headers.get("content-type");
+  if (contentType?.includes("application/json")) {
+    return res.json();
+  }
+  return null;
+}
+
+async function resolveTemplate(template: string, assetIds: string[]): Promise<string> {
+  if (!template || assetIds.length === 0) return template;
+
+  let result = template;
+
+  if (result.includes("{city}") || result.includes("{state}") || result.includes("{country}") || result.includes("{camera}")) {
+    // Get most common EXIF values
+    const exifRows = await db
+      .select({
+        city: exif.city,
+        state: exif.state,
+        country: exif.country,
+        make: exif.make,
+        model: exif.model,
+      })
+      .from(exif)
+      .where(inArray(exif.assetId, assetIds))
+      .limit(100);
+
+    const mostCommon = (values: (string | null)[]) => {
+      const counts = new Map<string, number>();
+      for (const v of values) {
+        if (v) counts.set(v, (counts.get(v) || 0) + 1);
+      }
+      let best = "";
+      let bestCount = 0;
+      for (const [v, c] of counts) {
+        if (c > bestCount) { best = v; bestCount = c; }
+      }
+      return best || "Unknown";
+    };
+
+    result = result.replace("{city}", mostCommon(exifRows.map((r) => r.city)));
+    result = result.replace("{state}", mostCommon(exifRows.map((r) => r.state)));
+    result = result.replace("{country}", mostCommon(exifRows.map((r) => r.country)));
+    result = result.replace("{camera}", mostCommon(exifRows.map((r) => [r.make, r.model].filter(Boolean).join(" "))));
+  }
+
+  if (result.includes("{date}")) {
+    const today = new Date();
+    result = result.replace("{date}", today.toISOString().split("T")[0]);
+  }
+
+  if (result.includes("{person}")) {
+    const faces = await db
+      .select({ name: person.name })
+      .from(assetFaces)
+      .innerJoin(person, eq(assetFaces.personId, person.id))
+      .where(inArray(assetFaces.assetId, assetIds))
+      .limit(100);
+
+    const names = faces.map((f) => f.name).filter(Boolean);
+    const mostCommon = (values: string[]) => {
+      const counts = new Map<string, number>();
+      for (const v of values) counts.set(v, (counts.get(v) || 0) + 1);
+      let best = "";
+      let bestCount = 0;
+      for (const [v, c] of counts) {
+        if (c > bestCount) { best = v; bestCount = c; }
+      }
+      return best || "Unknown";
+    };
+    result = result.replace("{person}", mostCommon(names));
+  }
+
+  return result;
+}
+
+export async function executeAction(
+  subType: string,
+  config: any,
+  assetIds: string[],
+  user: IUser
+): Promise<ActionResult> {
+  if (assetIds.length === 0) {
+    return { action: subType, assetsProcessed: 0 };
+  }
+
+  switch (subType) {
+    case "create_album": {
+      const albumName = await resolveTemplate(config.nameTemplate || "Auto Album", assetIds);
+      const album = await immichFetch("/albums", "POST", { albumName, assetIds }, user);
+      return { action: "create_album", assetsProcessed: assetIds.length, albumId: album.id, albumName };
+    }
+
+    case "add_to_album": {
+      if (!config.albumId) throw new Error("Album ID is required for add_to_album");
+      await immichFetch(`/albums/${config.albumId}/assets`, "PUT", { ids: assetIds }, user);
+      return { action: "add_to_album", assetsProcessed: assetIds.length, albumId: config.albumId };
+    }
+
+    case "remove_from_album": {
+      if (!config.albumId) throw new Error("Album ID is required for remove_from_album");
+      await immichFetch(`/albums/${config.albumId}/assets`, "DELETE", { ids: assetIds }, user);
+      return { action: "remove_from_album", assetsProcessed: assetIds.length, albumId: config.albumId };
+    }
+
+    case "favorite": {
+      await immichFetch("/assets", "PUT", { ids: assetIds, isFavorite: true }, user);
+      return { action: "favorite", assetsProcessed: assetIds.length };
+    }
+
+    case "unfavorite": {
+      await immichFetch("/assets", "PUT", { ids: assetIds, isFavorite: false }, user);
+      return { action: "unfavorite", assetsProcessed: assetIds.length };
+    }
+
+    case "archive": {
+      await immichFetch("/assets", "PUT", { ids: assetIds, isArchived: true }, user);
+      return { action: "archive", assetsProcessed: assetIds.length };
+    }
+
+    case "tag": {
+      if (!config.tagName) throw new Error("Tag name is required");
+      // Tags API may vary by Immich version — try the standard approach
+      try {
+        // Create or get tag
+        const tag = await immichFetch("/tags", "POST", { name: config.tagName, type: "OBJECT" }, user);
+        // Tag assets
+        await immichFetch(`/tags/${tag.id}/assets`, "PUT", { ids: assetIds }, user);
+        return { action: "tag", assetsProcessed: assetIds.length };
+      } catch (e: any) {
+        return { action: "tag", assetsProcessed: 0, error: e.message };
+      }
+    }
+
+    default:
+      return { action: subType, assetsProcessed: 0, error: `Unknown action: ${subType}` };
+  }
+}

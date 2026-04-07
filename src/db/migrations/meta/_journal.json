@@ -1,0 +1,41 @@
+{
+  "version": "5",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1774242821856,
+      "tag": "0000_vengeful_kylun",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1775227109706,
+      "tag": "0001_rainy_jamie_braddock",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1775560183481,
+      "tag": "0002_thin_triton",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1775567654903,
+      "tag": "0003_spooky_lockheed",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1775574030092,
+      "tag": "0004_equal_iron_monger",
+      "breakpoints": true
+    }
+  ]
+}

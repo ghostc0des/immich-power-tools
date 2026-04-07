@@ -1,0 +1,149 @@
+import { SQL, and, eq, ne, gte, lte, isNull, sql } from "drizzle-orm";
+import { assets } from "@/schema/assets.schema";
+import { exif } from "@/schema";
+import { ICondition } from "@/types/workflow";
+import { subDays } from "date-fns";
+
+export function buildConditions(conditions: ICondition[], ownerId: string): SQL[] {
+  const clauses: SQL[] = [
+    eq(assets.ownerId, ownerId),
+    eq(assets.visibility, "timeline"),
+    eq(assets.status, "active"),
+    isNull(assets.deletedAt),
+  ];
+
+  for (const c of conditions) {
+    const clause = buildSingleCondition(c);
+    if (clause) clauses.push(clause);
+  }
+
+  return clauses;
+}
+
+function buildSingleCondition(c: ICondition): SQL | undefined {
+  switch (c.type) {
+    case "city":
+      return c.match === "not_equals"
+        ? ne(exif.city, c.city)
+        : eq(exif.city, c.city);
+
+    case "state":
+      return c.match === "not_equals"
+        ? ne(exif.state, c.state)
+        : eq(exif.state, c.state);
+
+    case "country":
+      return c.match === "not_equals"
+        ? ne(exif.country, c.country)
+        : eq(exif.country, c.country);
+
+    case "camera_make":
+      return eq(exif.make, c.make);
+
+    case "camera_model":
+      return eq(exif.model, c.model);
+
+    case "lens":
+      return eq(exif.lensModel, c.lensModel);
+
+    case "asset_type":
+      return eq(assets.type, c.assetType || "IMAGE");
+
+    case "is_favorited":
+      return eq(assets.isFavorite, c.value !== false);
+
+    case "date_range": {
+      const parts: SQL[] = [];
+      if (c.after) parts.push(gte(exif.dateTimeOriginal, new Date(c.after)));
+      if (c.before) parts.push(lte(exif.dateTimeOriginal, new Date(c.before)));
+      return parts.length > 0 ? and(...parts)! : undefined;
+    }
+
+    case "date_relative":
+      if (c.lastDays) {
+        return gte(exif.dateTimeOriginal, subDays(new Date(), c.lastDays));
+      }
+      return undefined;
+
+    case "day_of_week":
+      if (c.days && c.days.length > 0) {
+        return sql`EXTRACT(DOW FROM ${exif.dateTimeOriginal}) IN (${sql.raw(c.days.join(","))})`;
+      }
+      return undefined;
+
+    case "iso_range": {
+      const parts: SQL[] = [];
+      if (c.min !== undefined) parts.push(gte(exif.iso, c.min));
+      if (c.max !== undefined) parts.push(lte(exif.iso, c.max));
+      return parts.length > 0 ? and(...parts)! : undefined;
+    }
+
+    case "focal_length": {
+      const parts: SQL[] = [];
+      if (c.min !== undefined) parts.push(gte(exif.focalLength, c.min));
+      if (c.max !== undefined) parts.push(lte(exif.focalLength, c.max));
+      return parts.length > 0 ? and(...parts)! : undefined;
+    }
+
+    case "rating": {
+      const parts: SQL[] = [];
+      if (c.min !== undefined) parts.push(gte(exif.rating, c.min));
+      if (c.max !== undefined) parts.push(lte(exif.rating, c.max));
+      return parts.length > 0 ? and(...parts)! : undefined;
+    }
+
+    case "person": {
+      const ids: string[] = c.personIds || (c.personId ? [c.personId] : []);
+      if (ids.length === 0) return undefined;
+
+      if (c.match === "not_contains") {
+        // Asset must not contain ANY of these people
+        const checks = ids.map((pid: string) =>
+          sql`NOT EXISTS (SELECT 1 FROM "asset_face" af WHERE af."assetId" = ${assets.id} AND af."personId" = ${pid})`
+        );
+        return and(...checks)!;
+      }
+
+      if (c.match === "contains_all") {
+        // Asset must contain ALL of these people
+        const checks = ids.map((pid: string) =>
+          sql`EXISTS (SELECT 1 FROM "asset_face" af WHERE af."assetId" = ${assets.id} AND af."personId" = ${pid})`
+        );
+        return and(...checks)!;
+      }
+
+      // contains_any (default) — asset contains at least one of these people
+      const idList = ids.map((id: string) => `'${id}'`).join(",");
+      return sql`EXISTS (SELECT 1 FROM "asset_face" af WHERE af."assetId" = ${assets.id} AND af."personId" IN (${sql.raw(idList)}))`;
+    }
+
+    case "person_unnamed":
+      if (c.match === "no_unnamed") {
+        return sql`NOT EXISTS (SELECT 1 FROM "asset_face" af JOIN "person" p ON af."personId" = p.id WHERE af."assetId" = ${assets.id} AND (p.name = '' OR p.name IS NULL))`;
+      }
+      return sql`EXISTS (SELECT 1 FROM "asset_face" af JOIN "person" p ON af."personId" = p.id WHERE af."assetId" = ${assets.id} AND (p.name = '' OR p.name IS NULL))`;
+
+    case "not_in_album":
+      return sql`NOT EXISTS (SELECT 1 FROM "album_asset" aa WHERE aa."assetId" = ${assets.id})`;
+
+    case "not_in_specific_album":
+      return sql`NOT EXISTS (SELECT 1 FROM "album_asset" aa WHERE aa."assetId" = ${assets.id} AND aa."albumId" = ${c.albumId})`;
+
+    case "geo_radius":
+      if (c.lat !== undefined && c.lng !== undefined && c.radiusKm) {
+        // Haversine approximation: 1 degree ≈ 111km
+        const latDelta = c.radiusKm / 111;
+        const lngDelta = c.radiusKm / (111 * Math.cos((c.lat * Math.PI) / 180));
+        return and(
+          gte(exif.latitude, c.lat - latDelta),
+          lte(exif.latitude, c.lat + latDelta),
+          gte(exif.longitude, c.lng - lngDelta),
+          lte(exif.longitude, c.lng + lngDelta),
+        )!;
+      }
+      return undefined;
+
+    default:
+      return undefined;
+  }
+}

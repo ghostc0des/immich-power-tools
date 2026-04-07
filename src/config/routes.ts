@@ -44,6 +44,7 @@ export const ASSET_PREVIEW_PATH = (id: string) => BASE_PROXY_ENDPOINT + "/asset/
 export const ASSET_VIDEO_PATH = (id: string) => BASE_PROXY_ENDPOINT + "/asset/video/" + id;
 export const ASSET_GEO_HEATMAP_PATH = BASE_API_ENDPOINT + "/assets/geo-heatmap";
 export const LIST_EMPTY_VIDEOS_PATH = BASE_API_ENDPOINT + "/assets/empty-videos";
+export const LIST_ORPHAN_ASSETS_PATH = BASE_API_ENDPOINT + "/assets/orphan-finder";
 
 
 
@@ -84,3 +85,34 @@ export const SHARE_LINK_DOWNLOAD_PATH = (token: string) => BASE_API_ENDPOINT + "
 export const DOWNLOAD_ASSETS_PATH = BASE_PROXY_ENDPOINT + "/download/archive";
 
 export const LIST_DUPLICATES_PATH = BASE_PROXY_ENDPOINT + "/duplicates";
+
+// Settings
+export const SETTINGS_API_KEYS_PATH = BASE_API_ENDPOINT + "/settings/api-keys";
+export const SETTINGS_API_KEY_PATH = (purpose: string) => BASE_API_ENDPOINT + "/settings/api-keys/" + purpose;
+
+// Share Key
+export const SHARE_KEY_PATH = BASE_API_ENDPOINT + "/share-key";
+
+// Import Shared
+export const IMPORT_SHARED_PATH = BASE_API_ENDPOINT + "/import-shared";
+export const IMPORT_SHARED_UPLOAD_ALL_PATH = BASE_API_ENDPOINT + "/import-shared/upload-all";
+
+// Permissions
+export const VALIDATE_PERMISSIONS_PATH = BASE_API_ENDPOINT + "/validate-permissions";
+
+// Import Jobs (queue)
+export const IMPORT_JOBS_PATH = BASE_API_ENDPOINT + "/import-jobs";
+export const IMPORT_JOB_PATH = (jobId: string) => BASE_API_ENDPOINT + "/import-jobs/" + jobId;
+
+// Workflows
+export const LIST_WORKFLOWS_PATH = BASE_API_ENDPOINT + "/workflows";
+export const CREATE_WORKFLOW_PATH = BASE_API_ENDPOINT + "/workflows";
+export const GET_WORKFLOW_PATH = (id: string) => BASE_API_ENDPOINT + "/workflows/" + id;
+export const UPDATE_WORKFLOW_PATH = (id: string) => BASE_API_ENDPOINT + "/workflows/" + id;
+export const DELETE_WORKFLOW_PATH = (id: string) => BASE_API_ENDPOINT + "/workflows/" + id;
+export const SAVE_WORKFLOW_GRAPH_PATH = (id: string) => BASE_API_ENDPOINT + "/workflows/" + id + "/graph";
+export const RUN_WORKFLOW_PATH = (id: string) => BASE_API_ENDPOINT + "/workflows/" + id + "/run";
+export const WORKFLOW_RUNS_PATH = (id: string) => BASE_API_ENDPOINT + "/workflows/" + id + "/runs";
+export const EXPORT_WORKFLOW_PATH = (id: string) => BASE_API_ENDPOINT + "/workflows/" + id + "/export";
+export const IMPORT_WORKFLOW_PATH = BASE_API_ENDPOINT + "/workflows/import";
+export const WORKFLOW_RUN_DETAIL_PATH = (id: string, runId: string) => BASE_API_ENDPOINT + "/workflows/" + id + "/runs/" + runId;

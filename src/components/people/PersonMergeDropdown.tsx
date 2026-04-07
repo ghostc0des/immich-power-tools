@@ -54,7 +54,7 @@ export function PersonMergeDropdown({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [similarLoading, setSimilarLoading] = useState(true);
-  const searchTimer = useRef<NodeJS.Timeout>();
+  const searchTimer = useRef<NodeJS.Timeout>(undefined);
   const [selectedPeople, setSelectedPeople] = useState<IPerson[]>([]);
   const [primaryPerson, setPrimaryPerson] = useState<IPerson>(person);
   const [merging, setMerging] = useState(false);

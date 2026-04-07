@@ -134,6 +134,18 @@ const fetchJson = async <T>(url: string) => {
     headers: { accept: "application/json" },
   });
   if (!response.ok) {
+    let errorBody: { message?: string } = {};
+    try { errorBody = await response.json(); } catch { /* ignore */ }
+    if (response.status === 401 && errorBody.message === "Password required") {
+      const err = new Error("PASSWORD_REQUIRED");
+      (err as any).code = "PASSWORD_REQUIRED";
+      throw err;
+    }
+    if (response.status === 401 && errorBody.message === "Invalid password") {
+      const err = new Error("Invalid password for this shared link.");
+      (err as any).code = "INVALID_PASSWORD";
+      throw err;
+    }
     throw new Error(`Request failed for ${url} (status ${response.status})`);
   }
   return (await response.json()) as T;
@@ -147,6 +159,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const payload = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
   const link = payload?.link;
+  const password = payload?.password;
 
   if (!link || typeof link !== "string") {
     return respondWithError(res, 400, "A shared album link is required");
@@ -157,9 +170,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return respondWithError(res, 400, "Invalid Immich share link");
   }
 
+  const authQuery = password
+    ? `key=${parsed.key}&password=${encodeURIComponent(password)}`
+    : `key=${parsed.key}`;
+
   try {
     const sharedLink = await fetchJson<ImmichSharedLinkResponse>(
-      `${parsed.origin}/api/shared-links/me?key=${parsed.key}`
+      `${parsed.origin}/api/shared-links/me?${authQuery}`
     );
 
     const albumId = sharedLink.album?.id;
@@ -167,7 +184,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (albumId) {
       const album = await fetchJson<ImmichAlbumResponse>(
-        `${parsed.origin}/api/albums/${albumId}?key=${parsed.key}&withoutAssets=false`
+        `${parsed.origin}/api/albums/${albumId}?${authQuery}&withoutAssets=false`
       );
 
       const assets = (album.assets || []).map((asset) => ({
@@ -216,6 +233,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json(responseBody);
   } catch (error: any) {
+    if (error?.code === "PASSWORD_REQUIRED") {
+      return res.status(401).json({ error: "PASSWORD_REQUIRED" });
+    }
+    if (error?.code === "INVALID_PASSWORD") {
+      return res.status(401).json({ error: error.message });
+    }
     console.error("Import shared error", error);
     return respondWithError(res, 500, error?.message ?? "Failed to import shared album");
   }

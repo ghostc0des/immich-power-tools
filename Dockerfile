@@ -1,13 +1,10 @@
 # Source: https://github.com/vercel/next.js/blob/canary/examples/with-docker/README.md
 
 # Install dependencies only when needed
-FROM node:22-alpine AS deps
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-
-RUN apk add --no-cache libc6-compat
+FROM oven/bun:1-alpine AS deps
 WORKDIR /app
-COPY package.json  ./
-RUN npm install --frozen-lockfile
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 
 # Rebuild the source code only when needed
 FROM node:22-alpine AS builder
@@ -38,10 +35,15 @@ RUN adduser -S nextjs -u 1001
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./package.json
 
-# Automatically leverage output traces to reduce image size 
+# Automatically leverage output traces to reduce image size
 # https://nextjs.org/docs/advanced-features/output-file-tracing
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/src/db/migrations ./src/db/migrations
+
+# Copy native libsql binaries — Next.js standalone tracing misses dynamically required native modules
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/@libsql ./node_modules/@libsql
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/libsql ./node_modules/libsql
 
 USER nextjs
 
