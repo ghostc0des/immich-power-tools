@@ -48,6 +48,11 @@ export default function Sidebar() {
                     >
                       {nav.icon}
                       {nav.title}
+                      {nav.badge && (
+                        <span className="ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 leading-none">
+                          {nav.badge}
+                        </span>
+                      )}
                     </Link>
                   ))}
                 </div>
