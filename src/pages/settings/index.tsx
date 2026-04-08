@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   RefreshCw, Trash2, Save, Eye, EyeOff, ExternalLink,
-  Key, Workflow, Shield, CheckCircle, XCircle, Server, Globe,
+  Key, Workflow, Shield, CheckCircle, XCircle, Server, Globe, Download, Wand2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
@@ -60,6 +60,12 @@ export default function SettingsPage() {
     valid: boolean; error: string | null; permissions: string[]; missing: string[];
   } | null>(null);
 
+  const [importApiKey, setImportApiKey] = useState("");
+  const [importApiKeyLoading, setImportApiKeyLoading] = useState(false);
+  const [showImportApiKey, setShowImportApiKey] = useState(false);
+  const [importApiKeySaved, setImportApiKeySaved] = useState(false);
+  const [generatingImportKey, setGeneratingImportKey] = useState(false);
+
   const fetchWorkflowApiKey = async () => {
     try {
       const data = await API.get("/api/settings/kv/workflow_api_key");
@@ -68,6 +74,40 @@ export default function SettingsPage() {
     } catch {
       setWorkflowApiKeySaved(false);
     }
+  };
+
+  const fetchImportApiKey = async () => {
+    try {
+      const data = await API.get("/api/settings/kv/import_api_key");
+      setImportApiKey(data.value || "");
+      setImportApiKeySaved(!!data.value);
+    } catch {
+      setImportApiKeySaved(false);
+    }
+  };
+
+  const saveImportApiKey = async () => {
+    setImportApiKeyLoading(true);
+    try {
+      await API.put("/api/settings/kv/import_api_key", { value: importApiKey.trim() });
+      setImportApiKeySaved(!!importApiKey.trim());
+      toast.success(importApiKey.trim() ? "Import API key saved" : "Import API key cleared");
+    } catch {
+      toast.error("Failed to save import API key");
+    }
+    setImportApiKeyLoading(false);
+  };
+
+  const handleGenerateImportKey = async () => {
+    setGeneratingImportKey(true);
+    try {
+      await API.post("/api/settings/generate-import-api-key", {});
+      await fetchImportApiKey();
+      toast.success("Import API key generated and saved");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to generate import API key");
+    }
+    setGeneratingImportKey(false);
   };
 
   const saveWorkflowApiKey = async () => {
@@ -123,6 +163,7 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchKeys();
     fetchWorkflowApiKey();
+    fetchImportApiKey();
   }, []);
 
   const handleDelete = async (purpose: string) => {
@@ -256,6 +297,74 @@ export default function SettingsPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1 text-xs text-primary hover:underline shrink-0 ml-3"
+                >
+                  Create in Immich
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* Import API Key */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <Download className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">Import API Key</h2>
+            {importApiKeySaved ? (
+              <CheckCircle className="h-3.5 w-3.5 text-green-500 ml-auto" />
+            ) : (
+              <XCircle className="h-3.5 w-3.5 text-yellow-500 ml-auto" />
+            )}
+          </div>
+          <div className="border rounded-lg p-4 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Immich API key used when importing from shared links. Needs asset upload, album, and tag permissions.
+            </p>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  type={showImportApiKey ? "text" : "password"}
+                  className="h-9 text-sm font-mono pr-10"
+                  placeholder="Paste your Immich API key here"
+                  value={importApiKey}
+                  onChange={(e) => setImportApiKey(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowImportApiKey((v) => !v)}
+                >
+                  {showImportApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <Button size="sm" className="h-9" onClick={saveImportApiKey} disabled={importApiKeyLoading}>
+                <Save className="h-3.5 w-3.5 mr-1" />
+                {importApiKeyLoading ? "Saving..." : "Save"}
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {["asset.read", "asset.upload", "album.read", "album.create", "album.update", "tag.create"].map((p) => (
+                <Badge key={p} variant="outline" className="text-[10px] h-5 font-mono font-normal">{p}</Badge>
+              ))}
+            </div>
+            <div className="flex items-center justify-between">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={handleGenerateImportKey}
+                disabled={generatingImportKey}
+              >
+                <Wand2 className="h-3 w-3 mr-1" />
+                {generatingImportKey ? "Generating..." : "Generate automatically"}
+              </Button>
+              {exImmichUrl && (
+                <Link
+                  href={`${exImmichUrl}/user-settings?isOpen=api-keys`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs text-primary hover:underline"
                 >
                   Create in Immich
                   <ExternalLink className="h-3 w-3" />

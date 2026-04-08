@@ -30,12 +30,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { ASSET_THUMBNAIL_PATH } from "@/config/routes";
 import { IWorkflowRun } from "@/types/workflow";
-import { ArrowLeft, Play, Save, Clock, Webhook, History, ChevronUp, ChevronDown, Bug, TriangleAlert, Wand2 } from "lucide-react";
+import { ArrowLeft, Play, Save, Clock, Webhook, History, ChevronUp, ChevronDown, Bug } from "lucide-react";
 import Head from "next/head";
 import { format } from "date-fns";
 import Link from "next/link";
 import Loader from "@/components/ui/loader";
 import API from "@/lib/api";
+import ApiKeyGate from "@/components/shared/ApiKeyGate";
+
+const WORKFLOW_PERMISSIONS = [
+  { name: "asset.read", description: "Query and filter assets" },
+  { name: "asset.update", description: "Favorite, archive, update metadata" },
+  { name: "album.read", description: "Read album data" },
+  { name: "album.create", description: "Create new albums" },
+  { name: "album.update", description: "Add/remove assets from albums" },
+  { name: "tag.create", description: "Create and assign tags" },
+];
 
 function generateId() {
   return Math.random().toString(36).substring(2, 15);
@@ -232,7 +242,6 @@ function WorkflowEditorInner() {
   const [showRuns, setShowRuns] = useState(false);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
-  const [generatingKey, setGeneratingKey] = useState(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([] as Node[]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([] as Edge[]);
@@ -260,19 +269,6 @@ function WorkflowEditorInner() {
       .then((data) => setHasApiKey(!!data?.value))
       .catch(() => setHasApiKey(false));
   }, [id]);
-
-  const handleGenerateApiKey = async () => {
-    setGeneratingKey(true);
-    try {
-      await API.post("/api/settings/generate-workflow-api-key", {});
-      setHasApiKey(true);
-      hotToast.success("Workflow API key created and saved");
-    } catch (err: any) {
-      hotToast.error(err?.message ?? "Failed to create API key");
-    } finally {
-      setGeneratingKey(false);
-    }
-  };
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((eds) => addEdge({ ...connection, animated: true }, eds));
@@ -491,54 +487,6 @@ function WorkflowEditorInner() {
           </PopoverContent>
         </Popover>
 
-        {/* API Key warning */}
-        {hasApiKey === false && (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 text-yellow-500 hover:text-yellow-600">
-                <TriangleAlert className="h-4 w-4 mr-1" />
-                <span className="text-xs">API Key Missing</span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80" align="end">
-              <div className="space-y-3">
-                <div className="flex items-start gap-2">
-                  <TriangleAlert className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium">Workflow API Key Not Configured</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Workflows need a dedicated Immich API key to execute actions like creating albums, favoriting assets, and managing tags.
-                    </p>
-                  </div>
-                </div>
-                <div className="border rounded p-2 bg-muted/50">
-                  <p className="text-xs font-medium mb-1">Required Permissions:</p>
-                  <ul className="text-[10px] text-muted-foreground space-y-0.5">
-                    <li>- <strong>asset.read</strong> — Query and filter assets</li>
-                    <li>- <strong>asset.update</strong> — Favorite, archive, update metadata</li>
-                    <li>- <strong>album.create</strong> — Create new albums</li>
-                    <li>- <strong>album.update</strong> — Add/remove assets from albums</li>
-                    <li>- <strong>tag.create</strong> — Create and assign tags</li>
-                  </ul>
-                </div>
-                <Button
-                  size="sm"
-                  className="w-full h-7 text-xs"
-                  onClick={handleGenerateApiKey}
-                  disabled={generatingKey}
-                >
-                  <Wand2 className="h-3 w-3 mr-1" />
-                  {generatingKey ? "Creating..." : "Generate automatically"}
-                </Button>
-                <Link href="/settings" className="block">
-                  <Button size="sm" variant="outline" className="w-full h-7 text-xs">
-                    Configure manually in Settings
-                  </Button>
-                </Link>
-              </div>
-            </PopoverContent>
-          </Popover>
-        )}
 
         <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => handleRun("debug")} disabled={running}>
@@ -561,8 +509,19 @@ function WorkflowEditorInner() {
         {/* Left: Node palette */}
         <NodePalette />
 
+        {/* API Key gate — shown instead of canvas when key is missing */}
+        {hasApiKey === false && (
+          <ApiKeyGate
+            title="Workflow API Key Required"
+            description="Workflows need a dedicated Immich API key to execute actions like creating albums, favoriting assets, and managing tags. Generate one automatically or configure it in Settings."
+            permissions={WORKFLOW_PERMISSIONS}
+            generateEndpoint="/api/settings/generate-workflow-api-key"
+            onGenerated={() => setHasApiKey(true)}
+          />
+        )}
+
         {/* Center: Canvas */}
-        <div className="flex-1" ref={reactFlowWrapper}>
+        <div className={`flex-1 ${hasApiKey === false ? "hidden" : ""}`} ref={reactFlowWrapper}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -585,9 +544,11 @@ function WorkflowEditorInner() {
         </div>
 
         {/* Right: Config panel */}
-        <div className="w-72 min-w-[288px] border-l bg-background overflow-y-auto h-full">
-          {renderConfigPanel()}
-        </div>
+        {hasApiKey !== false && (
+          <div className="w-72 min-w-[288px] border-l bg-background overflow-y-auto h-full">
+            {renderConfigPanel()}
+          </div>
+        )}
       </div>
 
       {/* Runs panel */}

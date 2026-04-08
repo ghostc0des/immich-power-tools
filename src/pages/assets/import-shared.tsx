@@ -20,6 +20,16 @@ import {
 } from "lucide-react";
 import PageLayout from "@/components/layouts/PageLayout";
 import Header from "@/components/shared/Header";
+import ApiKeyGate from "@/components/shared/ApiKeyGate";
+
+const IMPORT_PERMISSIONS = [
+  { name: "asset.read", description: "Check for existing assets" },
+  { name: "asset.upload", description: "Upload new assets" },
+  { name: "album.read", description: "Read album data" },
+  { name: "album.create", description: "Create new albums" },
+  { name: "album.update", description: "Add assets to albums" },
+  { name: "tag.create", description: "Tag imported assets" },
+];
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -151,6 +161,15 @@ export default function ImportSharedPage() {
   const [jobProgress, setJobProgress] = useState<{ uploaded: number; skipped: number; failed: number; total: number } | null>(null);
   const [tagAssets, setTagAssets] = useState(true);
   const [detailJobId, setDetailJobId] = useState<string | null>(null);
+
+  const [hasImportApiKey, setHasImportApiKey] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch("/api/settings/kv/import_api_key")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => setHasImportApiKey(!!data?.value))
+      .catch(() => setHasImportApiKey(false));
+  }, []);
 
   const { data: permissions } = useQuery({
     queryKey: ["validate-permissions"],
@@ -440,8 +459,19 @@ export default function ImportSharedPage() {
         }
       />
 
+      {/* ── API key gate ── */}
+      {hasImportApiKey === false && (
+        <ApiKeyGate
+          title="Import API Key Required"
+          description="Importing shared albums requires a dedicated Immich API key with upload permissions. Generate one automatically or configure it in Settings."
+          permissions={IMPORT_PERMISSIONS}
+          generateEndpoint="/api/settings/generate-import-api-key"
+          onGenerated={() => setHasImportApiKey(true)}
+        />
+      )}
+
       {/* ── Landing state ── */}
-      {!sharedData && (
+      {hasImportApiKey !== false && !sharedData && (
         <div className="flex flex-1 justify-center px-4 py-8">
           <div className="w-full max-w-2xl space-y-6">
             {permissions?.canUpload === false && (
@@ -552,7 +582,7 @@ export default function ImportSharedPage() {
       )}
 
       {/* ── Album detail + gallery view ── */}
-      {sharedData && albumDetails && sharedLinkDetails && (
+      {hasImportApiKey !== false && sharedData && albumDetails && sharedLinkDetails && (
         <>
           <div className="flex flex-col gap-4 p-4 pb-36">
             {/* Upload banner */}

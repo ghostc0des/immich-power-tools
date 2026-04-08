@@ -1,11 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, and } from "drizzle-orm";
 import { appDb } from "@/db";
 import { importJobs, importJobItems } from "@/db/schema";
+import { settings } from "@/db/schema/settings.schema";
 import { getCurrentUser } from "@/handlers/serverUtils/user.utils";
 import { getUserHeaders } from "@/helpers/user.helper";
 import { runImportJob } from "@/workers/import/runner";
 import { getProcessor } from "@/workers/import/registry";
+import { ENV } from "@/config/environment";
+
+const IMPORT_API_KEY_SETTING = "import_api_key";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") {
@@ -66,7 +70,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }))
   );
 
-  const headers = getUserHeaders(currentUser) as Record<string, string>;
+  // Prefer import API key over user session for uploads
+  const [importKeyRow] = await appDb
+    .select()
+    .from(settings)
+    .where(and(eq(settings.key, IMPORT_API_KEY_SETTING), eq(settings.ownerId, currentUser.id)));
+
+  let headers: Record<string, string>;
+  if (importKeyRow?.value) {
+    headers = { "x-api-key": importKeyRow.value, "Content-Type": "application/json" };
+  } else {
+    headers = getUserHeaders(currentUser) as Record<string, string>;
+  }
+
   runImportJob(job.id, headers).catch((err) =>
     console.error("Unhandled error in runImportJob", err)
   );
