@@ -30,7 +30,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { ASSET_THUMBNAIL_PATH } from "@/config/routes";
 import { IWorkflowRun } from "@/types/workflow";
-import { ArrowLeft, Play, Save, Clock, Webhook, History, ChevronUp, ChevronDown, Bug, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Play, Save, Clock, Webhook, History, ChevronUp, ChevronDown, Bug, TriangleAlert, Wand2 } from "lucide-react";
+import Head from "next/head";
 import { format } from "date-fns";
 import Link from "next/link";
 import Loader from "@/components/ui/loader";
@@ -231,6 +232,7 @@ function WorkflowEditorInner() {
   const [showRuns, setShowRuns] = useState(false);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
+  const [generatingKey, setGeneratingKey] = useState(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([] as Node[]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([] as Edge[]);
@@ -258,6 +260,19 @@ function WorkflowEditorInner() {
       .then((data) => setHasApiKey(!!data?.value))
       .catch(() => setHasApiKey(false));
   }, [id]);
+
+  const handleGenerateApiKey = async () => {
+    setGeneratingKey(true);
+    try {
+      await API.post("/api/settings/generate-workflow-api-key", {});
+      setHasApiKey(true);
+      hotToast.success("Workflow API key created and saved");
+    } catch (err: any) {
+      hotToast.error(err?.message ?? "Failed to create API key");
+    } finally {
+      setGeneratingKey(false);
+    }
+  };
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((eds) => addEdge({ ...connection, animated: true }, eds));
@@ -421,11 +436,16 @@ function WorkflowEditorInner() {
 
   return (
     <div className="flex flex-col h-screen">
+      <Head>
+        <title>{workflowName ? `${workflowName} — Workflow` : "Workflow"}</title>
+      </Head>
       {/* Top bar */}
       <div className="h-12 border-b flex items-center gap-3 px-4 bg-background shrink-0">
         <Link href="/workflows" className="text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
         </Link>
+        <span className="text-sm text-muted-foreground hidden sm:inline">Workflow</span>
+        <span className="text-muted-foreground hidden sm:inline">/</span>
         <Input
           className="h-8 w-64 text-sm font-medium"
           value={workflowName}
@@ -501,9 +521,18 @@ function WorkflowEditorInner() {
                     <li>- <strong>tag.create</strong> — Create and assign tags</li>
                   </ul>
                 </div>
+                <Button
+                  size="sm"
+                  className="w-full h-7 text-xs"
+                  onClick={handleGenerateApiKey}
+                  disabled={generatingKey}
+                >
+                  <Wand2 className="h-3 w-3 mr-1" />
+                  {generatingKey ? "Creating..." : "Generate automatically"}
+                </Button>
                 <Link href="/settings" className="block">
-                  <Button size="sm" className="w-full h-7 text-xs">
-                    Configure in Settings
+                  <Button size="sm" variant="outline" className="w-full h-7 text-xs">
+                    Configure manually in Settings
                   </Button>
                 </Link>
               </div>

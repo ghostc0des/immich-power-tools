@@ -13,8 +13,19 @@ import { usePhotoSelectionContext } from '@/contexts/PhotoSelectionContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import dynamic from 'next/dynamic';
 import { Heart, Info, Trash2, ExternalLink } from 'lucide-react';
-import { updateAssets } from '@/handlers/api/asset.handler';
+import { updateAssets, deleteAssets } from '@/handlers/api/asset.handler';
 import { toast } from '@/components/ui/use-toast';
+import {
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+  AlertDialogPortal,
+  AlertDialogOverlay,
+} from '@/components/ui/alert-dialog';
+import * as AlertDialogPrimitive from '@radix-ui/react-alert-dialog';
 
 const AssetInfoPanel = dynamic(() => import('@/components/asset-info/AssetInfoPanel'), { ssr: false });
 
@@ -50,6 +61,8 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
     return false
   });
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => new Set(assets.filter(a => a.isFavorite).map(a => a.id)));
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const { exImmichUrl } = useConfig();
   // Use context for selection state
   const { selectedIds, updateContext } = usePhotoSelectionContext();
@@ -145,7 +158,7 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
   };
 
   const slides = useMemo(() => {
-    return assets.map((asset) => ({
+    return assets.filter((asset) => !deletedIds.has(asset.id)).map((asset) => ({
       ...asset,
       orientation: 1,
       src: asset.previewUrl as string,
@@ -166,18 +179,20 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
   }, [assets]);
 
   const images: AssetPhoto[] = useMemo(() => {
-    return assets.map((p) => ({
-      ...p,
-      src: p.url as string,
-      original: p.previewUrl as string,
-      width: p.exifImageWidth as number,
-      height: p.exifImageHeight as number,
-      orientation: 1,
-      isSelected: selectedIds.includes(p.id),
-      isVideo: p.type === "VIDEO",
-      duration: p.duration != null ? String(p.duration) : undefined,
-    }));
-  }, [assets, selectedIds, exImmichUrl]);
+    return assets
+      .filter((p) => !deletedIds.has(p.id))
+      .map((p) => ({
+        ...p,
+        src: p.url as string,
+        original: p.previewUrl as string,
+        width: p.exifImageWidth as number,
+        height: p.exifImageHeight as number,
+        orientation: 1,
+        isSelected: selectedIds.includes(p.id),
+        isVideo: p.type === "VIDEO",
+        duration: p.duration != null ? String(p.duration) : undefined,
+      }));
+  }, [assets, selectedIds, deletedIds]);
 
   const handleEsc = (event: KeyboardEvent) => {
     if (event.key === "Escape") {
@@ -242,20 +257,15 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
       >
         <ExternalLink className="h-6 w-6 text-white" />
       </button>,
-      ...(onDeleteAsset ? [
-        <button
-          key="delete"
-          type="button"
-          className="yarl__button"
-          title="Delete"
-          onClick={() => {
-            onDeleteAsset(currentAsset.id);
-            setIndex(-1);
-          }}
-        >
-          <Trash2 className="h-6 w-6 text-white" />
-        </button>,
-      ] : []),
+      <button
+        key="delete"
+        type="button"
+        className="yarl__button"
+        title="Delete"
+        onClick={() => setDeleteConfirmOpen(true)}
+      >
+        <Trash2 className="h-6 w-6 text-white" />
+      </button>,
     ];
   }, [currentAsset, showInfoPanel, onDeleteAsset, onFavoriteAsset, handleOpenInImmich, favoriteIds, handleToggleFavorite]);
 
@@ -280,7 +290,7 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
         render={{
           slideContainer: ({ children }) => (
             <div className="flex h-full w-full">
-              <div className="flex-1 flex items-center justify-center overflow-hidden">
+              <div className="flex-1 overflow-hidden">
                 {children}
               </div>
               {showInfoPanel && currentAsset && (
@@ -295,8 +305,47 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
           container: {
             backgroundColor: "rgba(0, 0, 0, 0.95)",
           },
+          slide: {
+            padding: 0,
+          },
         }}
       />
+      <AlertDialogPrimitive.Root open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogPortal>
+          <AlertDialogOverlay className="!z-[10000]" />
+          <AlertDialogPrimitive.Content className="fixed left-[50%] top-[50%] z-[10001] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete asset?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete{currentAsset ? ` "${currentAsset.originalFileName}"` : " this asset"}. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setDeleteConfirmOpen(false)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={async () => {
+                  if (currentAsset) {
+                    try {
+                      await deleteAssets([currentAsset.id]);
+                      setDeletedIds((prev) => new Set(prev).add(currentAsset.id));
+                      onDeleteAsset?.(currentAsset.id);
+                      toast({ title: "Deleted", description: `"${currentAsset.originalFileName}" deleted.` });
+                      setIndex(-1);
+                    } catch {
+                      toast({ title: "Error", description: "Failed to delete asset.", variant: "destructive" });
+                    }
+                  }
+                  setDeleteConfirmOpen(false);
+                }}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogPrimitive.Content>
+        </AlertDialogPortal>
+      </AlertDialogPrimitive.Root>
+
       <RowsPhotoAlbum
         photos={images}
         targetRowHeight={150}
