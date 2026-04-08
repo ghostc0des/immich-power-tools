@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogTrigger, DialogDescription } from '../ui/dialog';
 import { Button, ButtonProps } from '../ui/button';
+import { DropdownMenuItem } from '../ui/dropdown-menu';
 import { ShareLinkFilters } from '@/types/shareLink';
 import { generateShareLink } from '@/handlers/api/shareLink.handler';
 import { createShareKey, getShareKey } from '@/handlers/api/share-key.handler';
@@ -13,9 +14,11 @@ import { Select, SelectValue, SelectContent, SelectItem, SelectTrigger } from '.
 interface ShareAssetsTriggerProps {
   filters: ShareLinkFilters
   buttonProps?: ButtonProps
+  asDropdownItem?: boolean
+  children?: React.ReactNode
 }
 
-export default function ShareAssetsTrigger({ filters, buttonProps }: ShareAssetsTriggerProps) {
+export default function ShareAssetsTrigger({ filters, buttonProps, asDropdownItem, children }: ShareAssetsTriggerProps) {
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -91,7 +94,13 @@ export default function ShareAssetsTrigger({ filters, buttonProps }: ShareAssets
   return (
     <Dialog onOpenChange={(open) => { if (open) checkShareKey(); }}>
       <DialogTrigger asChild>
-        <Button {...buttonProps}>Share</Button>
+        {asDropdownItem ? (
+          <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="gap-2">
+            {children}
+          </DropdownMenuItem>
+        ) : (
+          <Button {...buttonProps}>{children ?? "Share"}</Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

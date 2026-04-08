@@ -1,23 +1,30 @@
 import { IPerson } from "@/types/person";
 import React, { useRef, useState } from "react";
-import { Avatar } from "../ui/avatar";
 import { mergePerson, searchPeople, updatePerson } from "@/handlers/api/people.handler";
 import { PersonMergeDropdown } from "./PersonMergeDropdown";
 import PersonBirthdayCell from "./PersonBirthdayCell";
 import clsx from "clsx";
 import Link from "next/link";
-import { ArrowUpRight, Info } from "lucide-react";
+import { ArrowUpRight, Eye, EyeOff, GitMerge, Info, MoreHorizontal, Share2 } from "lucide-react";
 import { useConfig } from "@/contexts/ConfigContext";
 import { useToast } from "../ui/use-toast";
-import { Badge } from "../ui/badge";
-import { Button } from "@/components/ui/button";
 import ShareAssetsTrigger from "../shared/ShareAssetsTrigger";
 import { Autocomplete, AutocompleteOption } from "../ui/autocomplete";
 import { AlertDialog, IAlertDialogActions } from "../ui/alert-dialog";
+import { Tooltip } from "../ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+
 interface IProps {
   person: IPerson;
   onRemove: (person: IPerson) => void;
 }
+
 export default function PersonItem({ person, onRemove }: IProps) {
   const { exImmichUrl } = useConfig();
   const { toast } = useToast();
@@ -30,26 +37,15 @@ export default function PersonItem({ person, onRemove }: IProps) {
   const handleEdit = () => {
     if (formData.name && formData.name !== person.name) {
       setLoading(true);
-      return updatePerson(person.id, {
-        name: formData.name,
-      })
+      return updatePerson(person.id, { name: formData.name })
         .then(() => {
-          setEditMode(!editMode);
-          toast({
-            title: "Success",
-            description: "Person updated successfully",
-          });
+          setEditMode(false);
+          toast({ title: "Success", description: "Person updated successfully" });
         })
         .catch(() => {
-          toast({
-            title: "Error",
-            description: "Failed to update person",
-            variant: "destructive",
-          });
+          toast({ title: "Error", description: "Failed to update person", variant: "destructive" });
         })
-        .finally(() => {
-          setLoading(false);
-        });
+        .finally(() => setLoading(false));
     } else {
       setEditMode(!editMode);
     }
@@ -57,19 +53,10 @@ export default function PersonItem({ person, onRemove }: IProps) {
 
   const handleHide = (hidden: boolean) => {
     setLoading(true);
-    return updatePerson(person.id, {
-      isHidden: hidden,
-    })
-      .then(() => {
-        setFormData((person) => ({
-          ...person,
-          isHidden: hidden,
-        }));
-      })
-      .catch(() => { })
-      .finally(() => {
-        setLoading(false);
-      });
+    return updatePerson(person.id, { isHidden: hidden })
+      .then(() => setFormData((p) => ({ ...p, isHidden: hidden })))
+      .catch(() => {})
+      .finally(() => setLoading(false));
   };
 
   const handleMerge = async (option: AutocompleteOption) => {
@@ -79,87 +66,133 @@ export default function PersonItem({ person, onRemove }: IProps) {
   return (
     <div
       className={clsx(
-        "flex flex-col rounded-lg pb-2 border border-2 border-transparent items-center gap-2",
+        "group relative flex flex-col rounded-xl overflow-hidden border bg-card transition-all duration-200",
+        "hover:shadow-lg hover:border-border/80",
         {
-          "opacity-50": formData.isHidden,
-          "border border-blue-500": formData.name,
+          "opacity-40": formData.isHidden,
+          "border-border shadow-sm": formData.name,
+          "border-border/40": !formData.name,
         }
       )}
     >
-      <div className="relative w-full h-auto group">
-        <Avatar
-          className="w-full min-h-full h-auto rounded-lg"
-          src={person.thumbnailPath}
-          alt={person.name}
-        />
-        <div className="absolute bottom-2 w-full flex justify-center items-center">
-          <Badge variant={"secondary"} className="text-xs !font-medium font-mono">{person.assetCount} Assets</Badge>
+      {/* Image area */}
+      <div className="relative aspect-square w-full overflow-hidden bg-muted">
+        {person.thumbnailPath ? (
+          <img
+            src={person.thumbnailPath}
+            alt={formData.name || "Unknown"}
+            className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-[1.03]"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-muted">
+            <span className="text-4xl text-muted-foreground/30 font-light select-none">?</span>
+          </div>
+        )}
+
+        {/* Gradient overlay — always visible at bottom */}
+        <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
+
+        {/* Asset count — bottom-left of image */}
+        <div className="absolute bottom-1.5 left-2 pointer-events-none">
+          <span className="text-[10px] font-medium text-white/80 tabular-nums">
+            {formData.isHidden && <span className="mr-0.5 opacity-70">Hidden ·</span>}
+            {person.assetCount}
+          </span>
         </div>
-        <div className="absolute top-2 left-2 group-hover:flex hidden items-center gap-2">
-          <Link
-            className="bg-green-300 block rounded-lg px-2 py-1 text-sm dark:text-gray-900"
-            href={`${exImmichUrl}/people/${person.id}`}
-            target="_blank"
-          >
-            <ArrowUpRight size={16} />
-          </Link>
-          <Link
-            className="bg-gray-300 block rounded-lg px-2 py-1 text-sm dark:text-gray-900"
-            href={`/people/${person.id}`}
-          >
-            <Info size={16} />
-          </Link>
+
+        {/* Three-dot menu — top-right, visible on hover */}
+        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="p-1 rounded-full bg-black/50 hover:bg-black/70 text-white backdrop-blur-sm transition-colors">
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" sideOffset={4} className="min-w-[160px]">
+              <DropdownMenuItem asChild>
+                <Link href={`/people/${person.id}`} className="gap-2">
+                  <Info className="h-3.5 w-3.5" />
+                  View details
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={`${exImmichUrl}/people/${person.id}`} target="_blank" className="gap-2">
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                  Open in Immich
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <ShareAssetsTrigger
+                filters={{ personIds: [person.id] }}
+                asDropdownItem
+              >
+                <Share2 className="h-3.5 w-3.5" />
+                Share assets
+              </ShareAssetsTrigger>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-        <div className="absolute top-2 right-2 flex flex-col gap-2">
-          <PersonMergeDropdown person={person} onRemove={onRemove} />
-          <Button variant="outline" className="!py-0.5 !px-2 text-xs h-7" onClick={() => {
-            handleHide(!formData.isHidden);
-          }}>
-            {formData.isHidden ? "Show" : "Hide"}
-          </Button>
-          <ShareAssetsTrigger filters={{ personIds: [person.id] }} buttonProps={{ variant: "outline", className: "!py-0.5 !px-2 text-xs h-7" }} />
+
+        {/* Quick actions — bottom-right, visible on hover */}
+        <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+          <Tooltip content={formData.isHidden ? "Show person" : "Hide person"}>
+            <button
+              onClick={() => handleHide(!formData.isHidden)}
+              disabled={loading}
+              className="h-6 w-6 rounded-full bg-black/50 hover:bg-black/70 text-white backdrop-blur-sm flex items-center justify-center transition-colors"
+            >
+              {formData.isHidden ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+            </button>
+          </Tooltip>
+          <Tooltip content="Merge">
+            <span>
+              <PersonMergeDropdown
+                person={person}
+                onRemove={onRemove}
+                triggerClassName="!p-0 !h-6 !w-6 rounded-full !bg-black/50 hover:!bg-black/70 !text-white !border-transparent backdrop-blur-sm flex items-center justify-center"
+                triggerIcon={<GitMerge className="h-3 w-3" />}
+              />
+            </span>
+          </Tooltip>
         </div>
       </div>
-      {!editMode ? (
-        <h2
-          className="text-lg text-center font-semibold hover:bg-gray-300 dark:hover:bg-gray-800 w-full px-2 py-1 rounded-lg"
-          onClick={() => {
-            setEditMode((prev) => !prev);
-          }}
-        >
-          {formData.name ? (
-            formData.name
-          ) : (
-            <span className="text-gray-400">Unknown</span>
-          )}
-        </h2>
-      ) : (
-        <Autocomplete
-          loadOptions={(query: string) => searchPeople(query).then((people) => people.map((person: any) => ({
-            label: person.name, value: person.id,
-            imageUrl: person.thumbnailPath
-          })))}
-          type="text"
-          className="text-lg font-semibold text-center w-full px-2 py-1 rounded-lg"
-          defaultValue={formData.name}
-          placeholder="Enter name"
-          autoFocus
-          onChange={(e) => {
-            setFormData({ ...formData, name: e.target.value });
-          }}
-          value={formData.name}
-          onOptionSelect={(value) => {
-            mergeDialogRef.current?.open();
-            selectedPerson.current = value;
-          }}
-          createNewLabel="Create"
-          disabled={loading}
-          onCreateNew={(value) => {
-            handleEdit();
-          }}
-        />
-      )}
-      <div className="flex flex-col gap-2">
+
+      {/* Name + birthday section */}
+      <div className="px-1.5 py-1.5 flex flex-col gap-1 min-w-0">
+        {!editMode ? (
+          <button
+            className="text-left w-full text-xs font-semibold leading-snug hover:text-muted-foreground transition-colors truncate"
+            onClick={() => setEditMode(true)}
+            title={formData.name || "Click to set name"}
+          >
+            {formData.name || (
+              <span className="text-muted-foreground/50 font-normal italic text-[11px]">Unknown</span>
+            )}
+          </button>
+        ) : (
+          <Autocomplete
+            loadOptions={(query: string) =>
+              searchPeople(query).then((people) =>
+                people.map((p: any) => ({ label: p.name, value: p.id, imageUrl: p.thumbnailPath }))
+              )
+            }
+            type="text"
+            className="text-xs font-semibold w-full px-1 py-0.5 rounded-md"
+            defaultValue={formData.name}
+            placeholder="Enter name"
+            autoFocus
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            value={formData.name}
+            onOptionSelect={(value) => {
+              mergeDialogRef.current?.open();
+              selectedPerson.current = value;
+            }}
+            createNewLabel="Save"
+            disabled={loading}
+            onCreateNew={() => handleEdit()}
+          />
+        )}
+
         <PersonBirthdayCell person={person} />
       </div>
 
@@ -168,9 +201,7 @@ export default function PersonItem({ person, onRemove }: IProps) {
         title="Merge Person"
         description="Are you sure you want to merge this person with the selected person?"
         onConfirm={() => {
-          if (selectedPerson.current) {
-            handleMerge(selectedPerson.current);
-          }
+          if (selectedPerson.current) handleMerge(selectedPerson.current);
         }}
       />
     </div>

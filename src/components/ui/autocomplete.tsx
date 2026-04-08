@@ -1,4 +1,5 @@
 import * as React from "react"
+import ReactDOM from "react-dom"
 import { Input } from "./input"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarImage } from "./avatar"
@@ -43,9 +44,17 @@ const Autocomplete = React.forwardRef<HTMLInputElement, AutocompleteProps>(
     const [options, setOptions] = React.useState<AutocompleteOption[]>(staticOptions || [])
     const [isLoading, setIsLoading] = React.useState(false)
     const [selectedIndex, setSelectedIndex] = React.useState(-1)
+    const [dropdownRect, setDropdownRect] = React.useState<{ top: number; left: number; width: number } | null>(null)
     const containerRef = React.useRef<HTMLDivElement>(null)
     const inputRef = React.useRef<HTMLInputElement>(null)
     const debounceTimeout = React.useRef<NodeJS.Timeout>(undefined)
+
+    const updateDropdownRect = React.useCallback(() => {
+      if (inputRef.current) {
+        const rect = inputRef.current.getBoundingClientRect()
+        setDropdownRect({ top: rect.bottom + window.scrollY + 4, left: rect.left + window.scrollX, width: rect.width })
+      }
+    }, [])
 
     // Find the label for the current value
     const currentLabel = React.useMemo(() => {
@@ -181,6 +190,7 @@ const Autocomplete = React.forwardRef<HTMLInputElement, AutocompleteProps>(
           }}
           value={inputValue}
           onFocus={() => {
+            updateDropdownRect()
             setOpen(true)
             setSelectedIndex(showCreateNew ? 0 : -1)
           }}
@@ -194,8 +204,11 @@ const Autocomplete = React.forwardRef<HTMLInputElement, AutocompleteProps>(
             props.onChange?.(e)
           }}
         />
-        {open && (filteredOptions.length > 0 || isLoading || showCreateNew) && (
-          <div className={cn("absolute left-0 right-0 z-50 mt-1 max-h-[300px] overflow-auto rounded-md border bg-popover shadow-md", position === "top" ? "top-full" : "bottom-full")}>
+        {open && (filteredOptions.length > 0 || isLoading || showCreateNew) && dropdownRect && typeof document !== "undefined" && ReactDOM.createPortal(
+          <div
+            style={{ position: "absolute", top: dropdownRect.top, left: dropdownRect.left, width: dropdownRect.width }}
+            className="z-[9999] max-h-[300px] overflow-auto rounded-md border bg-popover shadow-md"
+          >
             {isLoading ? (
               <div className="px-3 py-2 text-sm text-muted-foreground">
                 Loading...
@@ -241,7 +254,8 @@ const Autocomplete = React.forwardRef<HTMLInputElement, AutocompleteProps>(
                 ))}
               </>
             )}
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     )

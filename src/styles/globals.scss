@@ -101,6 +101,14 @@
 }
 
 
+.react-photo-album--photo a[href] {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.react-photo-album--photo:hover a[href] {
+  opacity: 1;
+}
+
 .leaflet-tile-pane {
   z-index: 1 !important;
 }

@@ -30,11 +30,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { ASSET_THUMBNAIL_PATH } from "@/config/routes";
 import { IWorkflowRun } from "@/types/workflow";
-import { ArrowLeft, Play, Save, Clock, Webhook, History, ChevronUp, ChevronDown, Bug, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Play, Save, Clock, Webhook, History, ChevronUp, ChevronDown, Bug } from "lucide-react";
+import Head from "next/head";
 import { format } from "date-fns";
 import Link from "next/link";
 import Loader from "@/components/ui/loader";
 import API from "@/lib/api";
+import ApiKeyGate from "@/components/shared/ApiKeyGate";
+
+const WORKFLOW_PERMISSIONS = [
+  { name: "asset.read", description: "Query and filter assets" },
+  { name: "asset.update", description: "Favorite, archive, update metadata" },
+  { name: "album.read", description: "Read album data" },
+  { name: "album.create", description: "Create new albums" },
+  { name: "album.update", description: "Add/remove assets from albums" },
+  { name: "tag.create", description: "Create and assign tags" },
+];
 
 function generateId() {
   return Math.random().toString(36).substring(2, 15);
@@ -121,26 +132,27 @@ function parseCronToForm(cron: string): { every: number; interval: string } {
   return { every: 0, interval: "hours" };
 }
 
-function SchedulePopover({ value, onChange, workflowId }: { value: string; onChange: (cron: string) => void; workflowId?: string }) {
-  const parsed = parseCronToForm(value);
+function TriggerPopover({
+  cronSchedule, onCronChange, webhookToken, workflowId,
+}: {
+  cronSchedule: string; onCronChange: (cron: string) => void; webhookToken: string | null; workflowId?: string;
+}) {
+  const parsed = parseCronToForm(cronSchedule);
   const [every, setEvery] = useState(parsed.every);
   const [interval, setInterval] = useState(parsed.interval);
 
   useEffect(() => {
-    const p = parseCronToForm(value);
+    const p = parseCronToForm(cronSchedule);
     setEvery(p.every);
     setInterval(p.interval);
-  }, [value]);
+  }, [cronSchedule]);
 
   const handleApply = () => {
-    if (every <= 0) {
-      onChange("");
-      return;
-    }
+    if (every <= 0) { handleClear(); return; }
     const opt = intervalOptions.find((o) => o.value === interval);
     if (opt) {
       const cron = opt.cron(every);
-      onChange(cron);
+      onCronChange(cron);
       if (workflowId) {
         updateWorkflow(workflowId, { cronSchedule: cron } as any)
           .then(() => hotToast.success(`Schedule set — every ${every} ${interval}`))
@@ -152,7 +164,7 @@ function SchedulePopover({ value, onChange, workflowId }: { value: string; onCha
   const handleClear = () => {
     setEvery(0);
     setInterval("hours");
-    onChange("");
+    onCronChange("");
     if (workflowId) {
       updateWorkflow(workflowId, { cronSchedule: null } as any)
         .then(() => hotToast.success("Schedule cleared"))
@@ -160,51 +172,81 @@ function SchedulePopover({ value, onChange, workflowId }: { value: string; onCha
     }
   };
 
-  const summaryLabel = value
-    ? `Every ${parseCronToForm(value).every} ${parseCronToForm(value).interval}`
-    : "Schedule";
+  const hasSchedule = !!cronSchedule;
+  const hasWebhook = !!webhookToken;
+  const isActive = hasSchedule || hasWebhook;
+
+  const webhookUrl = webhookToken
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/webhooks/${webhookToken}`
+    : "";
 
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant={value ? "secondary" : "ghost"} size="sm" className="h-8">
+        <Button variant={isActive ? "secondary" : "ghost"} size="sm" className="h-8">
           <Clock className="h-3.5 w-3.5 mr-1" />
-          {summaryLabel}
+          Triggers
+          {isActive && (
+            <span className="ml-1.5 text-[10px] bg-primary/15 text-primary rounded px-1 tabular-nums">
+              {[hasSchedule && "cron", hasWebhook && "webhook"].filter(Boolean).join(" + ")}
+            </span>
+          )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-64" align="start">
-        <div className="space-y-3">
-          <Label className="text-xs font-medium">Run every</Label>
-          <div className="flex items-center gap-2">
-            <Input
-              className="h-8 text-sm w-20"
-              type="number"
-              min={0}
-              value={every || ""}
-              onChange={(e) => setEvery(parseInt(e.target.value) || 0)}
-              placeholder="0"
-            />
-            <Select value={interval} onValueChange={setInterval}>
-              <SelectTrigger className="h-8 text-sm flex-1"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {intervalOptions.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      <PopoverContent className="w-80" align="end">
+        <div className="space-y-4">
+          {/* Schedule section */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-medium">Schedule</span>
+              {hasSchedule && <span className="ml-auto text-[10px] text-muted-foreground font-mono">{cronSchedule}</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground shrink-0">Every</span>
+              <Input
+                className="h-7 text-xs w-16"
+                type="number"
+                min={0}
+                value={every || ""}
+                onChange={(e) => setEvery(parseInt(e.target.value) || 0)}
+                placeholder="—"
+              />
+              <Select value={interval} onValueChange={setInterval}>
+                <SelectTrigger className="h-7 text-xs flex-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {intervalOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex gap-1.5">
+              <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleApply} disabled={every <= 0}>
+                Apply
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleClear} disabled={!hasSchedule}>
+                Clear
+              </Button>
+            </div>
           </div>
-          {every > 0 && (
-            <p className="text-[10px] text-muted-foreground font-mono">
-              {intervalOptions.find((o) => o.value === interval)?.cron(every)}
+
+          <div className="border-t" />
+
+          {/* Webhook section */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5">
+              <Webhook className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-medium">Webhook</span>
+            </div>
+            <Input
+              className="h-7 text-[11px] font-mono"
+              readOnly
+              value={webhookUrl || "Save workflow to get a webhook URL"}
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Configure this URL in Immich admin webhook settings to trigger on events.
             </p>
-          )}
-          <div className="flex gap-2">
-            <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleApply} disabled={every <= 0}>
-              Apply
-            </Button>
-            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleClear}>
-              Clear
-            </Button>
           </div>
         </div>
       </PopoverContent>
@@ -421,11 +463,16 @@ function WorkflowEditorInner() {
 
   return (
     <div className="flex flex-col h-screen">
+      <Head>
+        <title>{workflowName ? `${workflowName} — Workflow` : "Workflow"}</title>
+      </Head>
       {/* Top bar */}
       <div className="h-12 border-b flex items-center gap-3 px-4 bg-background shrink-0">
         <Link href="/workflows" className="text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
         </Link>
+        <span className="text-sm text-muted-foreground hidden sm:inline">Workflow</span>
+        <span className="text-muted-foreground hidden sm:inline">/</span>
         <Input
           className="h-8 w-64 text-sm font-medium"
           value={workflowName}
@@ -443,75 +490,14 @@ function WorkflowEditorInner() {
           }} />
         </div>
 
-        <div className="h-5 w-px bg-border mx-1" />
-
-        {/* Schedule config */}
-        <SchedulePopover value={cronSchedule} onChange={setCronSchedule} workflowId={id} />
-
-        {/* Webhook URL */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant={webhookToken ? "secondary" : "ghost"} size="sm" className="h-8">
-              <Webhook className="h-3.5 w-3.5 mr-1" />
-              Webhook
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80" align="start">
-            <div className="space-y-2">
-              <Label className="text-xs">Webhook URL</Label>
-              <Input
-                className="h-8 text-xs font-mono"
-                readOnly
-                value={webhookToken ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/webhooks/${webhookToken}` : "Save workflow first"}
-              />
-              <p className="text-[10px] text-muted-foreground">
-                Configure this URL in Immich admin webhook settings to trigger this workflow on events.
-              </p>
-            </div>
-          </PopoverContent>
-        </Popover>
-
-        {/* API Key warning */}
-        {hasApiKey === false && (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 text-yellow-500 hover:text-yellow-600">
-                <TriangleAlert className="h-4 w-4 mr-1" />
-                <span className="text-xs">API Key Missing</span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80" align="end">
-              <div className="space-y-3">
-                <div className="flex items-start gap-2">
-                  <TriangleAlert className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium">Workflow API Key Not Configured</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Workflows need a dedicated Immich API key to execute actions like creating albums, favoriting assets, and managing tags.
-                    </p>
-                  </div>
-                </div>
-                <div className="border rounded p-2 bg-muted/50">
-                  <p className="text-xs font-medium mb-1">Required Permissions:</p>
-                  <ul className="text-[10px] text-muted-foreground space-y-0.5">
-                    <li>- <strong>asset.read</strong> — Query and filter assets</li>
-                    <li>- <strong>asset.update</strong> — Favorite, archive, update metadata</li>
-                    <li>- <strong>album.create</strong> — Create new albums</li>
-                    <li>- <strong>album.update</strong> — Add/remove assets from albums</li>
-                    <li>- <strong>tag.create</strong> — Create and assign tags</li>
-                  </ul>
-                </div>
-                <Link href="/settings" className="block">
-                  <Button size="sm" className="w-full h-7 text-xs">
-                    Configure in Settings
-                  </Button>
-                </Link>
-              </div>
-            </PopoverContent>
-          </Popover>
-        )}
-
         <div className="ml-auto flex items-center gap-2">
+          <TriggerPopover
+            cronSchedule={cronSchedule}
+            onCronChange={setCronSchedule}
+            webhookToken={webhookToken}
+            workflowId={id}
+          />
+          <div className="h-5 w-px bg-border" />
           <Button variant="outline" size="sm" onClick={() => handleRun("debug")} disabled={running}>
             <Bug className="h-3.5 w-3.5 mr-1" />
             Debug
@@ -532,8 +518,19 @@ function WorkflowEditorInner() {
         {/* Left: Node palette */}
         <NodePalette />
 
+        {/* API Key gate — shown instead of canvas when key is missing */}
+        {hasApiKey === false && (
+          <ApiKeyGate
+            title="Workflow API Key Required"
+            description="Workflows need a dedicated Immich API key to execute actions like creating albums, favoriting assets, and managing tags. Generate one automatically or configure it in Settings."
+            permissions={WORKFLOW_PERMISSIONS}
+            generateEndpoint="/api/settings/generate-workflow-api-key"
+            onGenerated={() => setHasApiKey(true)}
+          />
+        )}
+
         {/* Center: Canvas */}
-        <div className="flex-1" ref={reactFlowWrapper}>
+        <div className={`flex-1 ${hasApiKey === false ? "hidden" : ""}`} ref={reactFlowWrapper}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -556,9 +553,11 @@ function WorkflowEditorInner() {
         </div>
 
         {/* Right: Config panel */}
-        <div className="w-72 min-w-[288px] border-l bg-background overflow-y-auto h-full">
-          {renderConfigPanel()}
-        </div>
+        {hasApiKey !== false && (
+          <div className="w-72 min-w-[288px] border-l bg-background overflow-y-auto h-full">
+            {renderConfigPanel()}
+          </div>
+        )}
       </div>
 
       {/* Runs panel */}

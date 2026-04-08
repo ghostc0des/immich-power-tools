@@ -142,7 +142,7 @@ function PersonChip({ person: p, exImmichUrl, isHidden: hidden, onUpdate }: Pers
               </div>
             )}
           </div>
-          <span className={`text-xs font-medium ${hidden ? 'line-through text-muted-foreground' : ''}`}>{p.personName || 'Unknown'}</span>
+          <span className={`text-xs font-medium ${hidden ? 'line-through text-muted-foreground' : 'text-foreground'}`}>{p.personName || 'Unknown'}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-3 z-[10000]" side="bottom" align="start">
@@ -262,7 +262,7 @@ export default function AssetInfoPanel({ assetId }: AssetInfoPanelProps) {
 
   if (loading) {
     return (
-      <div className="w-[360px] min-w-[360px] bg-background border-l overflow-y-auto p-4">
+      <div className="dark w-[360px] min-w-[360px] bg-background text-foreground border-l overflow-y-auto p-4">
         <h2 className="text-lg font-semibold mb-4">Info</h2>
         <div className="animate-pulse space-y-4">
           <div className="h-4 bg-muted rounded w-3/4" />
@@ -275,7 +275,7 @@ export default function AssetInfoPanel({ assetId }: AssetInfoPanelProps) {
 
   if (!detail) {
     return (
-      <div className="w-[360px] min-w-[360px] bg-background border-l overflow-y-auto p-4">
+      <div className="dark w-[360px] min-w-[360px] bg-background text-foreground border-l overflow-y-auto p-4">
         <h2 className="text-lg font-semibold mb-4">Info</h2>
         <p className="text-sm text-muted-foreground">Unable to load asset details.</p>
       </div>
@@ -296,7 +296,7 @@ export default function AssetInfoPanel({ assetId }: AssetInfoPanelProps) {
     : null
 
   return (
-    <div className="w-[360px] min-w-[360px] bg-background border-l overflow-y-auto">
+    <div className="dark w-[360px] min-w-[360px] bg-background text-foreground border-l overflow-y-auto">
       {/* Header */}
       <div className="p-4 pb-2">
         <h2 className="text-lg font-semibold">Info</h2>

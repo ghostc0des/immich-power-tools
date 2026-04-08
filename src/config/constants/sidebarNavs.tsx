@@ -4,6 +4,7 @@ interface SidebarNav {
   title: string;
   link: string;
   icon: React.ReactNode;
+  badge?: string;
 }
 
 interface SidebarGroup {
@@ -34,7 +35,7 @@ export const sidebarGroups: SidebarGroup[] = [
   {
     label: "Automation",
     items: [
-      { title: "Workflows", link: "/workflows", icon: <Workflow className="h-4 w-4" /> },
+      { title: "Workflows", link: "/workflows", icon: <Workflow className="h-4 w-4" />, badge: "Beta" },
     ],
   },
   {
