@@ -6,7 +6,7 @@ const respondWithError = (res: NextApiResponse, status: number, message: string)
 };
 
 const validateParams = (req: NextApiRequest) => {
-  const { origin, assetId, key, thumbhash } = req.query;
+  const { origin, assetId, key, thumbhash, platform, password } = req.query;
 
   if (!origin || Array.isArray(origin)) {
     return { error: "Query parameter 'origin' is required" };
@@ -18,12 +18,17 @@ const validateParams = (req: NextApiRequest) => {
     return { error: "Query parameter 'key' is required" };
   }
 
+  const resolvedPlatform = typeof platform === "string" ? platform : "immich";
+  const resolvedPassword = typeof password === "string" ? password : "";
+
   try {
     const parsedOrigin = new URL(origin);
     return {
       origin: parsedOrigin.origin,
       assetId,
       key,
+      platform: resolvedPlatform,
+      password: resolvedPassword,
       thumbhash: typeof thumbhash === "string" ? thumbhash : undefined,
     };
   } catch (_err) {
@@ -50,21 +55,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return respondWithError(res, 400, params.error as string);
   }
 
-  const search = new URLSearchParams({ key: params.key });
-  if (params.thumbhash) {
-    search.set("c", params.thumbhash);
-  }
-
-  const targetUrl = `${params.origin}/api/assets/${params.assetId}/video/playback?${search.toString()}`;
-
   try {
-    const upstream = await fetch(targetUrl, {
-      headers: {
+    let targetUrl: string;
+    let fetchHeaders: Record<string, string>;
+
+    if (params.platform === "nextcloud") {
+      // Nextcloud: stream via WebDAV
+      targetUrl = `${params.origin}/public.php/dav/files/${params.key}/${params.assetId}`;
+      const basicAuth = Buffer.from(`${params.key}:${params.password}`).toString("base64");
+      fetchHeaders = {
+        Authorization: `Basic ${basicAuth}`,
+        accept: "*/*",
+        ...(req.headers.range ? { range: req.headers.range } : {}),
+      };
+    } else {
+      // Immich: video playback endpoint
+      const search = new URLSearchParams({ key: params.key });
+      if (params.thumbhash) {
+        search.set("c", params.thumbhash);
+      }
+      targetUrl = `${params.origin}/api/assets/${params.assetId}/video/playback?${search.toString()}`;
+      fetchHeaders = {
         accept: "video/*",
         ...(req.headers.range ? { range: req.headers.range } : {}),
         referer: req.headers.referer?.toString() ?? params.origin,
         "sec-fetch-dest": "video",
-      },
+      };
+    }
+
+    const upstream = await fetch(targetUrl, {
+      headers: fetchHeaders,
     });
 
     if (!upstream.ok && upstream.status !== 206) {

@@ -5,43 +5,62 @@ import { ENV } from "@/config/environment";
 import {
   ensurePowerToolsTag,
   HeadersRecord,
-  inferAssetTypeFromName,
-  parseFileNameFromDisposition,
-  guessContentType,
   createImmichAlbum,
   addAssetToAlbum,
   uploadAssetBuffer,
   SharedAssetPayload,
   DownloadedAssetPayload,
   DEVICE_ID,
+  parseFileNameFromDisposition,
 } from "@/pages/api/import-shared/helpers";
 import type { ImportJob, ImportJobItem, ImportProcessor, ProcessorContext, SetupResult } from "../types";
 
-const makeDeviceAssetId = (assetId: string) => `shared-${assetId}`;
+const makeDeviceAssetId = (relativePath: string) => `shared-nc-${relativePath}`;
 
-const downloadSharedAsset = async (
-  asset: SharedAssetPayload,
-  origin: string,
-  key: string
+const buildBasicAuth = (username: string, password: string): string => {
+  const encoded = Buffer.from(`${username}:${password}`).toString("base64");
+  return `Basic ${encoded}`;
+};
+
+const downloadNextcloudAsset = async (
+  baseUrl: string,
+  token: string,
+  relativePath: string,
+  password: string
 ): Promise<DownloadedAssetPayload> => {
-  const url = `${origin}/api/assets/${asset.id}/original?key=${key}`;
-  const response = await fetch(url, { method: "GET", headers: { accept: "*/*" } });
+  const encodedPath = relativePath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  const url = `${baseUrl}/public.php/dav/files/${token}/${encodedPath}`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: buildBasicAuth(token, password),
+      accept: "*/*",
+    },
+  });
+
   if (!response.ok) {
-    throw new Error(`Failed to download ${asset.originalFileName ?? asset.id} (status ${response.status})`);
+    throw new Error(`Failed to download ${relativePath} from Nextcloud (status ${response.status})`);
   }
+
   const buffer = Buffer.from(await response.arrayBuffer());
   const disposition = response.headers.get("content-disposition");
   const inferredName = parseFileNameFromDisposition(disposition);
-  const fallbackExtension = asset.type === "VIDEO" ? "mp4" : "jpg";
-  const fileName = inferredName ?? asset.originalFileName ?? `${asset.id}.${fallbackExtension}`;
-  return { buffer, fileName, contentType: response.headers.get("content-type") };
+  const fileName = inferredName ?? relativePath.split("/").pop() ?? "unknown";
+
+  return {
+    buffer,
+    fileName,
+    contentType: response.headers.get("content-type"),
+  };
 };
 
-export class ImmichSharedLinkProcessor implements ImportProcessor {
+export class NextcloudSharedLinkProcessor implements ImportProcessor {
   async setup(job: ImportJob, context: ProcessorContext): Promise<SetupResult> {
     const headers = context.headers as HeadersRecord;
 
-    // Load all items for this job from the db
     const items = await appDb
       .select()
       .from(importJobItems)
@@ -60,13 +79,10 @@ export class ImmichSharedLinkProcessor implements ImportProcessor {
     const skipAssetIds: string[] = [];
     if (deviceAssetIds.length > 0) {
       try {
-        const jsonHeadersWithContentType: HeadersRecord = {
-          ...headers,
-          "Content-Type": "application/json",
-        };
+        const jsonHeaders: HeadersRecord = { ...headers, "Content-Type": "application/json" };
         const checkResponse = await fetch(`${ENV.IMMICH_URL}/api/assets/exist`, {
           method: "POST",
-          headers: jsonHeadersWithContentType,
+          headers: jsonHeaders,
           body: JSON.stringify({ deviceAssetIds, deviceId: DEVICE_ID }),
         });
 
@@ -81,10 +97,10 @@ export class ImmichSharedLinkProcessor implements ImportProcessor {
             }
           }
         } else {
-          console.warn(`[ImmichSharedLinkProcessor] Failed to check existing assets (status ${checkResponse.status})`);
+          console.warn(`[NextcloudProcessor] Failed to check existing assets (status ${checkResponse.status})`);
         }
       } catch (error) {
-        console.warn("[ImmichSharedLinkProcessor] Unable to check existing assets", error);
+        console.warn("[NextcloudProcessor] Unable to check existing assets", error);
       }
     }
 
@@ -93,7 +109,7 @@ export class ImmichSharedLinkProcessor implements ImportProcessor {
     try {
       importData = JSON.parse(job.importData);
     } catch {
-      // ignore parse errors, treat as empty
+      // ignore
     }
 
     const albumOptions = importData.albumOptions as {
@@ -103,16 +119,13 @@ export class ImmichSharedLinkProcessor implements ImportProcessor {
     } | undefined;
 
     let albumId: string | undefined;
-    const jsonHeadersWithContentType: HeadersRecord = {
-      ...headers,
-      "Content-Type": "application/json",
-    };
+    const jsonHeaders: HeadersRecord = { ...headers, "Content-Type": "application/json" };
 
     if (albumOptions?.createAlbum) {
       const desiredAlbumName =
-        albumOptions.albumName?.trim() || `Shared import ${new Date().toISOString()}`;
-      albumId = await createImmichAlbum(desiredAlbumName, jsonHeadersWithContentType);
-      console.log(`[ImmichSharedLinkProcessor] Created album ${albumId} (${desiredAlbumName})`);
+        albumOptions.albumName?.trim() || `Nextcloud import ${new Date().toISOString()}`;
+      albumId = await createImmichAlbum(desiredAlbumName, jsonHeaders);
+      console.log(`[NextcloudProcessor] Created album ${albumId} (${desiredAlbumName})`);
     } else if (typeof albumOptions?.addToAlbumId === "string" && albumOptions.addToAlbumId.trim()) {
       albumId = albumOptions.addToAlbumId.trim();
     }
@@ -120,14 +133,13 @@ export class ImmichSharedLinkProcessor implements ImportProcessor {
     const importDataPatch: Record<string, unknown> = {};
     if (albumId) importDataPatch.albumId = albumId;
 
-    // Tag assets with "immich-power-tools" if enabled
-    const tagAssets = importData.tagAssets !== false; // default true for backwards compat
+    const tagAssets = importData.tagAssets !== false;
     if (tagAssets) {
       try {
-        const tag = await ensurePowerToolsTag({ ...context.headers, "Content-Type": "application/json" } as HeadersRecord);
+        const tag = await ensurePowerToolsTag(jsonHeaders);
         importDataPatch.tagId = tag.id;
       } catch (err) {
-        console.warn("[ImmichSharedLinkProcessor] Failed to create power-tools tag, skipping tagging", err);
+        console.warn("[NextcloudProcessor] Failed to create power-tools tag, skipping tagging", err);
       }
     }
 
@@ -143,8 +155,10 @@ export class ImmichSharedLinkProcessor implements ImportProcessor {
 
     // Parse item metadata
     let asset: SharedAssetPayload;
+    let relativePath: string;
     try {
       const parsed = JSON.parse(item.itemData);
+      relativePath = parsed.relativePath ?? item.assetId;
       asset = {
         id: item.assetId,
         originalFileName: parsed.originalFileName,
@@ -152,29 +166,31 @@ export class ImmichSharedLinkProcessor implements ImportProcessor {
         fileCreatedAt: parsed.fileCreatedAt ?? null,
         localDateTime: parsed.localDateTime ?? null,
         duration: parsed.duration ?? null,
-        isFavorite: parsed.isFavorite ?? false,
-        isArchived: parsed.isArchived ?? false,
+        isFavorite: false,
+        isArchived: false,
       };
     } catch {
+      relativePath = item.assetId;
       asset = { id: item.assetId, type: "IMAGE" };
     }
 
-    // Parse urlConfig for the share key
+    // Parse urlConfig for token and password
     let urlConfig: Record<string, unknown> = {};
     try {
       urlConfig = JSON.parse(job.urlConfig);
     } catch {
       // ignore
     }
-    const key = typeof urlConfig.key === "string" ? urlConfig.key : "";
+    const token = typeof urlConfig.key === "string" ? urlConfig.key : "";
+    const password = typeof urlConfig.password === "string" ? urlConfig.password : "";
 
-    // Download the asset from the shared link
-    const downloaded = await downloadSharedAsset(asset, job.url, key);
+    // Download the asset from Nextcloud
+    const downloaded = await downloadNextcloudAsset(job.url, token, relativePath, password);
 
-    // Strip Content-Type for multipart upload (same pattern as upload-all.ts)
+    // Strip Content-Type for multipart upload
     const { ["Content-Type"]: _omit, ...uploadHeaders } = headers;
 
-    // Read tagId from importData set during setup() (optional)
+    // Read tagId from importData set during setup()
     const importData = JSON.parse(job.importData) as { albumId?: string; tagId?: string };
     const tagId = importData.tagId;
 
@@ -183,17 +199,14 @@ export class ImmichSharedLinkProcessor implements ImportProcessor {
       downloaded,
       uploadHeaders as HeadersRecord,
       headers as HeadersRecord,
-      makeDeviceAssetId(asset.id),
+      makeDeviceAssetId(relativePath),
       tagId
     );
 
     // Add to album if one was resolved during setup
     if (context.albumId) {
-      const jsonHeadersWithContentType: HeadersRecord = {
-        ...headers,
-        "Content-Type": "application/json",
-      };
-      await addAssetToAlbum(context.albumId, immichId, jsonHeadersWithContentType);
+      const jsonHeaders: HeadersRecord = { ...headers, "Content-Type": "application/json" };
+      await addAssetToAlbum(context.albumId, immichId, jsonHeaders);
     }
 
     return { immichId };

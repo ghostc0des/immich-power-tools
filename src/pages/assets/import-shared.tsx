@@ -84,6 +84,7 @@ interface IImportSharedAlbum {
 }
 
 interface IImportSharedResponse {
+  platform: "immich" | "nextcloud";
   link: string;
   origin: string;
   key: string;
@@ -295,7 +296,10 @@ export default function ImportSharedPage() {
       setImportAllLoading(false);
       setAlbumImportMode("album");
       setNeedsPassword(false);
-      setShareLinkPassword("");
+      // Keep password for Nextcloud (needed for import job and video proxy)
+      if (payload.platform !== "nextcloud") {
+        setShareLinkPassword("");
+      }
     } catch (err: any) {
       const errorCode = err?.error ?? err?.message ?? "Unexpected error";
       if (errorCode === "PASSWORD_REQUIRED") {
@@ -321,6 +325,7 @@ export default function ImportSharedPage() {
       origin: sharedData.origin,
       key: sharedData.key,
       size: "thumbnail",
+      platform: sharedData.platform,
     });
     if (asset.thumbhash) params.set("thumbhash", asset.thumbhash);
     return `/api/import-shared/thumbnail?${params.toString()}`;
@@ -332,8 +337,12 @@ export default function ImportSharedPage() {
       assetId: asset.id,
       origin: sharedData.origin,
       key: sharedData.key,
+      platform: sharedData.platform,
     });
     if (asset.thumbhash) params.set("thumbhash", asset.thumbhash);
+    if (sharedData.platform === "nextcloud" && shareLinkPassword) {
+      params.set("password", shareLinkPassword);
+    }
     return `/api/import-shared/video?${params.toString()}`;
   };
 
@@ -344,6 +353,7 @@ export default function ImportSharedPage() {
       origin: sharedData.origin,
       key: sharedData.key,
       size: "preview",
+      platform: sharedData.platform,
     });
     if (asset.thumbhash) params.set("thumbhash", asset.thumbhash);
     return `/api/import-shared/thumbnail?${params.toString()}`;
@@ -377,10 +387,16 @@ export default function ImportSharedPage() {
     setUploadBanner(null);
     setImportAllLoading(true);
     try {
+      const isNextcloud = sharedData.platform === "nextcloud";
+      const urlConfig: Record<string, string> = { key: sharedData.key };
+      if (isNextcloud && shareLinkPassword) {
+        urlConfig.password = shareLinkPassword;
+      }
+
       const job = await createImportJob({
-        platform: "immich",
+        platform: sharedData.platform,
         url: sharedData.origin,
-        urlConfig: { key: sharedData.key },
+        urlConfig,
         importData: { albumOptions, tagAssets },
         assets: uploadableAssets.map((asset) => ({
           id: asset.id,
@@ -391,6 +407,7 @@ export default function ImportSharedPage() {
           duration: asset.duration ?? null,
           isFavorite: asset.isFavorite ?? false,
           isArchived: asset.isArchived ?? false,
+          ...(isNextcloud ? { relativePath: asset.id } : {}),
         })),
       });
       setActiveJobId(job.jobId);
@@ -454,7 +471,7 @@ export default function ImportSharedPage() {
             <div className="space-y-2">
               <h1 className="text-2xl font-bold tracking-tight">Import a shared album</h1>
               <p className="text-sm text-muted-foreground">
-                Paste a public shared link from another Immich instance to import its assets into yours.
+                Paste a public shared link from <strong className="font-medium">Immich</strong> or <strong className="font-medium">Nextcloud</strong> to import its assets into your Immich instance.
               </p>
             </div>
 
@@ -471,7 +488,7 @@ export default function ImportSharedPage() {
                         setShareLinkPassword("");
                       }
                     }}
-                    placeholder="https://demo.immich.app/share/..."
+                    placeholder="Immich or Nextcloud share URL"
                     type="url"
                     required
                     className="pl-9"
@@ -507,24 +524,31 @@ export default function ImportSharedPage() {
                 <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
                   Previous imports
                 </h2>
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   {importHistory.jobs.map((job) => {
                     let jobImportData: Record<string, unknown> = {};
                     try { jobImportData = JSON.parse(job.importData); } catch { /* ignore */ }
                     const albumOpts = jobImportData.albumOptions as { albumName?: string } | undefined;
                     const albumName = albumOpts?.albumName;
+
+                    const borderColor = job.status === "completed"
+                      ? "border-l-emerald-500"
+                      : job.status === "failed"
+                        ? "border-l-destructive"
+                        : "border-l-amber-400";
+
                     const statusIcon = job.status === "completed" ? (
                       <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
                     ) : job.status === "failed" ? (
                       <XCircle className="h-4 w-4 text-destructive shrink-0" />
                     ) : (
-                      <Clock3 className="h-4 w-4 text-muted-foreground shrink-0 animate-pulse" />
+                      <Clock3 className="h-4 w-4 text-amber-400 shrink-0 animate-pulse" />
                     );
 
                     return (
                       <div
                         key={job.id}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer hover:bg-muted/60 transition-colors"
+                        className={`flex items-center gap-3 px-3 py-3 rounded-lg cursor-pointer border border-l-[3px] ${borderColor} bg-muted/30 hover:bg-muted/60 transition-colors`}
                         onClick={() => setDetailJobId(job.id)}
                       >
                         {statusIcon}
@@ -532,11 +556,21 @@ export default function ImportSharedPage() {
                           <p className="text-sm font-medium truncate">
                             {albumName || job.url}
                           </p>
-                          <p className="text-xs text-muted-foreground">
-                            {job.uploadedCount} imported
-                            {job.skippedCount > 0 && ` · ${job.skippedCount} skipped`}
-                            {job.failedCount > 0 && ` · ${job.failedCount} failed`}
-                          </p>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                              {job.uploadedCount} imported
+                            </span>
+                            {job.skippedCount > 0 && (
+                              <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                                {job.skippedCount} skipped
+                              </span>
+                            )}
+                            {job.failedCount > 0 && (
+                              <span className="inline-flex items-center rounded-full bg-destructive/15 px-2 py-0.5 text-[11px] font-medium text-destructive">
+                                {job.failedCount} failed
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <span className="text-xs text-muted-foreground whitespace-nowrap">
                           {formatDateOnly(job.createdAt)}
