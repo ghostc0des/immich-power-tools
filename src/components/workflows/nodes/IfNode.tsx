@@ -1,12 +1,38 @@
 import { Handle, Position, NodeProps } from "@xyflow/react";
 import { GitBranch } from "lucide-react";
+import { PERSON_THUBNAIL_PATH } from "@/config/routes";
+import { formatConditionSummary } from "./conditionSummary";
+
+function ConditionBadge({ condition }: { condition: any }) {
+  const summary = formatConditionSummary(condition);
+  const isPersonType = condition.type === "person";
+  const personIds: string[] = condition.personIds || (condition.personId ? [condition.personId] : []);
+
+  return (
+    <div className="flex items-center gap-1 min-w-0">
+      {isPersonType && personIds.length > 0 && (
+        <div className="flex -space-x-1 shrink-0">
+          {personIds.slice(0, 3).map((id: string) => (
+            <img key={id} src={PERSON_THUBNAIL_PATH(id)} alt="" className="h-4 w-4 rounded-full object-cover border border-background" />
+          ))}
+          {personIds.length > 3 && (
+            <span className="h-4 w-4 rounded-full bg-muted flex items-center justify-center text-[7px] font-medium border border-background">
+              +{personIds.length - 3}
+            </span>
+          )}
+        </div>
+      )}
+      <span className="text-[10px] text-muted-foreground truncate">{summary}</span>
+    </div>
+  );
+}
 
 export default function IfNode({ data, selected }: NodeProps) {
   const config = data.config ? (typeof data.config === "string" ? JSON.parse(data.config) : data.config) : {};
   const conditions = config.conditions || [];
 
   return (
-    <div className={`px-4 py-3 rounded-lg border-2 bg-background min-w-[200px] ${selected ? "border-blue-500" : "border-yellow-500"}`}>
+    <div className={`px-4 py-3 rounded-lg border-2 bg-background min-w-[200px] max-w-[280px] ${selected ? "border-blue-500" : "border-yellow-500"}`}>
       <Handle type="target" position={Position.Top} className="!bg-yellow-500 !w-3 !h-3" />
       <div className="flex items-center gap-2 mb-2">
         <div className="p-1.5 rounded bg-yellow-500/10">
@@ -17,9 +43,12 @@ export default function IfNode({ data, selected }: NodeProps) {
       {conditions.length > 0 ? (
         <div className="space-y-1">
           {conditions.map((c: any, i: number) => (
-            <p key={i} className="text-[10px] text-muted-foreground truncate">
-              {c.type}{c.city ? `: ${c.city}` : ""}{c.personId ? " (person)" : ""}{c.value !== undefined ? `: ${c.value}` : ""}
-            </p>
+            <div key={i}>
+              <ConditionBadge condition={c} />
+              {i < conditions.length - 1 && (
+                <p className="text-[8px] text-muted-foreground/60 font-medium text-center mt-0.5">AND</p>
+              )}
+            </div>
           ))}
         </div>
       ) : (

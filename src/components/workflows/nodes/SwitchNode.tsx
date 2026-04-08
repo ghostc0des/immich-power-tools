@@ -1,12 +1,43 @@
 import { Handle, Position, NodeProps } from "@xyflow/react";
 import { GitFork } from "lucide-react";
+import { PERSON_THUBNAIL_PATH } from "@/config/routes";
+import { formatConditionSummary } from "./conditionSummary";
+
+function CaseConditions({ conditions }: { conditions: any[] }) {
+  if (!conditions || conditions.length === 0) return null;
+  return (
+    <div className="space-y-0.5 mt-0.5">
+      {conditions.map((c: any, j: number) => {
+        const isPersonType = c.type === "person";
+        const personIds: string[] = c.personIds || (c.personId ? [c.personId] : []);
+        return (
+          <div key={j} className="flex items-center gap-1 min-w-0">
+            {isPersonType && personIds.length > 0 && (
+              <div className="flex -space-x-1 shrink-0">
+                {personIds.slice(0, 3).map((id: string) => (
+                  <img key={id} src={PERSON_THUBNAIL_PATH(id)} alt="" className="h-3.5 w-3.5 rounded-full object-cover border border-background" />
+                ))}
+                {personIds.length > 3 && (
+                  <span className="h-3.5 w-3.5 rounded-full bg-muted flex items-center justify-center text-[6px] font-medium border border-background">
+                    +{personIds.length - 3}
+                  </span>
+                )}
+              </div>
+            )}
+            <span className="text-[9px] text-muted-foreground/80 truncate">{formatConditionSummary(c)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function SwitchNode({ data, selected }: NodeProps) {
   const config = data.config ? (typeof data.config === "string" ? JSON.parse(data.config) : data.config) : {};
   const cases = config.cases || [];
 
   return (
-    <div className={`px-4 py-3 rounded-lg border-2 bg-background min-w-[220px] ${selected ? "border-blue-500" : "border-orange-500"}`}>
+    <div className={`px-4 py-3 rounded-lg border-2 bg-background min-w-[220px] max-w-[300px] ${selected ? "border-blue-500" : "border-orange-500"}`}>
       <Handle type="target" position={Position.Top} className="!bg-orange-500 !w-3 !h-3" />
       <div className="flex items-center gap-2 mb-2">
         <div className="p-1.5 rounded bg-orange-500/10">
@@ -16,11 +47,14 @@ export default function SwitchNode({ data, selected }: NodeProps) {
         <span className="text-[10px] text-muted-foreground ml-auto">{cases.length} cases</span>
       </div>
       {cases.length > 0 && (
-        <div className="space-y-1 mb-2">
+        <div className="space-y-1.5 mb-2">
           {cases.map((c: any, i: number) => (
-            <p key={i} className="text-[10px] text-muted-foreground truncate">
-              {c.label || `Case ${i + 1}`}
-            </p>
+            <div key={i} className="border-l-2 border-orange-500/40 pl-2">
+              <p className="text-[10px] text-foreground font-medium truncate">
+                {c.label || `Case ${i + 1}`}
+              </p>
+              <CaseConditions conditions={c.conditions} />
+            </div>
           ))}
         </div>
       )}
