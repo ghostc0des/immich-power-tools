@@ -1,27 +1,17 @@
 import PageLayout from "@/components/layouts/PageLayout";
 import Header from "@/components/shared/Header";
-import { deleteApiKey, getApiKeys, regenerateApiKey } from "@/handlers/api/settings.handler";
-import { AlertDialog } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  RefreshCw, Trash2, Save, Eye, EyeOff, ExternalLink,
-  Key, Workflow, Shield, CheckCircle, XCircle, Server, Globe, Download, Wand2,
+  Save, Eye, EyeOff, ExternalLink,
+  Workflow, Shield, CheckCircle, XCircle, Server, Globe, Download, Wand2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import API from "@/lib/api";
 import { useConfig } from "@/contexts/ConfigContext";
 import Link from "next/link";
-
-interface ApiKey {
-  id: string;
-  purpose: string;
-  keyName: string;
-  createdAt: string;
-}
 
 function ConnectionStatus({ label, url, icon: Icon }: { label: string; url: string; icon: any }) {
   return (
@@ -47,11 +37,6 @@ function ConnectionStatus({ label, url, icon: Icon }: { label: string; url: stri
 
 export default function SettingsPage() {
   const { exImmichUrl, immichURL, version, aiEnabled } = useConfig();
-  const [keys, setKeys] = useState<ApiKey[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState<string | null>(null);
-  const [regenerating, setRegenerating] = useState<string | null>(null);
-
   const [workflowApiKey, setWorkflowApiKey] = useState("");
   const [workflowApiKeyLoading, setWorkflowApiKeyLoading] = useState(false);
   const [showWorkflowApiKey, setShowWorkflowApiKey] = useState(false);
@@ -151,44 +136,10 @@ export default function SettingsPage() {
     setWorkflowApiKeyLoading(false);
   };
 
-  const fetchKeys = async () => {
-    setLoading(true);
-    try {
-      const data = await getApiKeys();
-      setKeys(data);
-    } catch {}
-    setLoading(false);
-  };
-
   useEffect(() => {
-    fetchKeys();
     fetchWorkflowApiKey();
     fetchImportApiKey();
   }, []);
-
-  const handleDelete = async (purpose: string) => {
-    setDeleting(purpose);
-    try {
-      await deleteApiKey(purpose);
-      setKeys((prev) => prev.filter((k) => k.purpose !== purpose));
-      toast.success("API key deleted");
-    } catch (err: any) {
-      toast.error(err.message ?? "Failed to delete API key");
-    }
-    setDeleting(null);
-  };
-
-  const handleRegenerate = async (purpose: string) => {
-    setRegenerating(purpose);
-    try {
-      await regenerateApiKey(purpose);
-      await fetchKeys();
-      toast.success("API key regenerated");
-    } catch (err: any) {
-      toast.error(err.message ?? "Failed to regenerate API key");
-    }
-    setRegenerating(null);
-  };
 
   return (
     <PageLayout>
@@ -374,78 +325,6 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* Managed API Keys */}
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <Key className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">Managed API Keys</h2>
-            <span className="text-xs text-muted-foreground ml-auto">{keys.length} key{keys.length !== 1 ? "s" : ""}</span>
-          </div>
-          <div className="border rounded-lg">
-            {loading ? (
-              <div className="px-4 py-6 text-center">
-                <p className="text-sm text-muted-foreground">Loading...</p>
-              </div>
-            ) : keys.length === 0 ? (
-              <div className="px-4 py-6 text-center">
-                <Key className="h-5 w-5 text-muted-foreground/40 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">No managed API keys yet.</p>
-                <p className="text-xs text-muted-foreground/60 mt-0.5">Keys are created automatically when needed (e.g. share links).</p>
-              </div>
-            ) : (
-              <ul className="divide-y">
-                {keys.map((key) => (
-                  <li key={key.id} className="flex items-center justify-between px-4 py-3 gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                        <Key className="h-3.5 w-3.5 text-muted-foreground" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium truncate">{key.keyName}</span>
-                          <Badge variant="secondary" className="capitalize text-[10px] h-4">{key.purpose}</Badge>
-                        </div>
-                        <span className="text-[10px] text-muted-foreground">
-                          Created {new Date(key.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-0.5 shrink-0">
-                      <AlertDialog
-                        title="Regenerate API Key"
-                        description={`This will delete the current "${key.keyName}" key from Immich and create a new one.`}
-                        onConfirm={() => handleRegenerate(key.purpose)}
-                      >
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          disabled={regenerating === key.purpose || deleting === key.purpose}
-                        >
-                          <RefreshCw className={`h-3.5 w-3.5 ${regenerating === key.purpose ? "animate-spin" : ""}`} />
-                        </Button>
-                      </AlertDialog>
-                      <AlertDialog
-                        title="Delete API Key"
-                        description={`This will remove the "${key.keyName}" key. Share links that depend on it will stop working.`}
-                        onConfirm={() => handleDelete(key.purpose)}
-                      >
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          disabled={deleting === key.purpose || regenerating === key.purpose}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
-                      </AlertDialog>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
       </div>
     </PageLayout>
   );
