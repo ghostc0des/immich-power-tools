@@ -1,6 +1,7 @@
 import "@xyflow/react/dist/style.css";
 
 import { useRouter } from "next/router";
+import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
@@ -256,6 +257,7 @@ function TriggerPopover({
 
 function WorkflowEditorInner() {
   const router = useRouter();
+  const { theme } = useTheme();
   const { id } = router.query as { id: string };
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
@@ -532,6 +534,7 @@ function WorkflowEditorInner() {
         {/* Center: Canvas */}
         <div className={`flex-1 ${hasApiKey === false ? "hidden" : ""}`} ref={reactFlowWrapper}>
           <ReactFlow
+            colorMode={theme === "dark" ? "dark" : "light"}
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}

@@ -34,13 +34,16 @@ export default function ActionNode({ data, selected }: NodeProps) {
         <div className="p-1.5 rounded bg-purple-500/10">
           <Icon className="h-4 w-4 text-purple-500" />
         </div>
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-xs font-medium text-foreground">{label}</p>
           {subType === "create_album" && config.nameTemplate && (
-            <p className="text-[10px] text-muted-foreground truncate max-w-[140px]">{config.nameTemplate}</p>
+            <p className="text-[10px] text-muted-foreground truncate max-w-[160px]">{config.nameTemplate}</p>
+          )}
+          {(subType === "add_to_album" || subType === "remove_from_album") && config.albumName && (
+            <p className="text-[10px] text-muted-foreground truncate max-w-[160px]">{config.albumName}</p>
           )}
           {subType === "tag" && config.tagName && (
-            <p className="text-[10px] text-muted-foreground">{config.tagName}</p>
+            <p className="text-[10px] text-muted-foreground truncate max-w-[160px]">{config.tagName}</p>
           )}
         </div>
       </div>

@@ -1,6 +1,7 @@
 import "@xyflow/react/dist/style.css";
 
 import { useRouter } from "next/router";
+import { useTheme } from "next-themes";
 import { useEffect, useMemo, useState } from "react";
 import {
   ReactFlow,
@@ -212,6 +213,7 @@ function dbEdgeToFlowEdge(e: any): Edge {
 
 function RunDetailInner() {
   const router = useRouter();
+  const { theme } = useTheme();
   const { id, runId } = router.query as { id: string; runId: string };
 
   const [loading, setLoading] = useState(true);
@@ -300,6 +302,7 @@ function RunDetailInner() {
         {/* Graph */}
         <div className="flex-1">
           <ReactFlow
+            colorMode={theme === "dark" ? "dark" : "light"}
             nodes={nodes}
             edges={edges}
             nodeTypes={annotatedNodeTypes}

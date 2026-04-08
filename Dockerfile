@@ -45,6 +45,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/src/db/migrations ./src/db/migrat
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules/@libsql ./node_modules/@libsql
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules/libsql ./node_modules/libsql
 
+RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
+
 USER nextjs
 
 EXPOSE 3000

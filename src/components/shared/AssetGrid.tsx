@@ -290,7 +290,7 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
         render={{
           slideContainer: ({ children }) => (
             <div className="flex h-full w-full">
-              <div className="flex-1 overflow-hidden">
+              <div className="flex-1 overflow-hidden flex items-center justify-center">
                 {children}
               </div>
               {showInfoPanel && currentAsset && (

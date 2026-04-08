@@ -11,9 +11,9 @@ import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 
 L.Icon.Default.mergeOptions({
-  iconUrl: markerIcon.src,
-  iconRetinaUrl: markerIcon2x.src,
-  shadowUrl: markerShadow.src,
+  iconUrl: typeof markerIcon === 'string' ? markerIcon : markerIcon.src,
+  iconRetinaUrl: typeof markerIcon2x === 'string' ? markerIcon2x : markerIcon2x.src,
+  shadowUrl: typeof markerShadow === 'string' ? markerShadow : markerShadow.src,
 });
 
 interface LeafletHeatMapProps {
