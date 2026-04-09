@@ -75,7 +75,7 @@ If you're using portainer, run the docker using `docker run` and add the power t
 
 ```bash
 # Run the power tools from docker 
-docker run -d --name immich_power_tools -p 8001:3000 --env-file .env ghcr.io/varun-raj/immich-power-tools:latest
+docker run -d --name immich_power_tools -p 8001:3000 --env-file .env ghcr.io/immich-power-tools/immich-power-tools:latest
 
 # Add Power tools to the same network as immich
 docker network connect immich_default immich_power_tools
