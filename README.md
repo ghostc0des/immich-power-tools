@@ -42,10 +42,15 @@ services:
   power-tools:
     container_name: immich_power_tools
     image: ghcr.io/immich-power-tools/immich-power-tools:latest
+    volumes:
+      - immich-power-tools-data:/app/data
     ports:
       - "8001:3000"
     env_file:
       - .env
+
+volumes:
+  immich-power-tools-data:
 ```
 
 Add the Immich API Key and immich url's to the env file (which you already have for the immich).
@@ -75,7 +80,7 @@ If you're using portainer, run the docker using `docker run` and add the power t
 
 ```bash
 # Run the power tools from docker 
-docker run -d --name immich_power_tools -p 8001:3000 --env-file .env ghcr.io/immich-power-tools/immich-power-tools:latest
+docker run -d --name immich_power_tools -p 8001:3000 -v immich-power-tools-data:/app/data --env-file .env ghcr.io/immich-power-tools/immich-power-tools:latest
 
 # Add Power tools to the same network as immich
 docker network connect immich_default immich_power_tools

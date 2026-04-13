@@ -74,6 +74,8 @@ services:
   power-tools:
     container_name: immich_power_tools
     image: ghcr.io/immich-power-tools/immich-power-tools:latest
+    volumes:
+      - immich-power-tools-data:/app/data
     ports:
       - "8001:3000"
     env_file:
@@ -87,3 +89,4 @@ services:
 
 volumes:
   model-cache:
+  immich-power-tools-data:

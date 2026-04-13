@@ -8,5 +8,10 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
+    volumes:
+      - immich-power-tools-data:/app/data
     env_file:
       - .env
+
+volumes:
+  immich-power-tools-data:
