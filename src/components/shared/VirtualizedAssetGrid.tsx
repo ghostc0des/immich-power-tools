@@ -77,12 +77,12 @@ const VirtualizedAssetGrid = forwardRef<VirtualizedAssetGridRef, VirtualizedAsse
   }, [assets]);
 
   const handleClick = useCallback((index: number, asset: IAsset, event: React.MouseEvent<HTMLElement>) => {
-    if (selectedIds.length > 0) {
+    if (selectable && (event.metaKey || event.ctrlKey || selectedIds.length > 0)) {
       handleSelect(index, asset, event);
     } else {
       setIndex(index);
     }
-  }, [selectedIds]);
+  }, [selectedIds, selectable, handleSelect]);
 
   const handleSelect = useCallback((_idx: number, asset: IAsset, event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
@@ -166,11 +166,15 @@ const VirtualizedAssetGrid = forwardRef<VirtualizedAssetGridRef, VirtualizedAsse
           )}
           {selectable && (
             <div 
-              className={`absolute top-2 left-2 w-4 h-4 rounded-full border-2 ${
+              className={`absolute top-2 left-2 w-4 h-4 rounded-full border-2 cursor-pointer z-10 ${
                 isSelected 
                   ? 'bg-blue-500 border-blue-500' 
                   : 'bg-white/80 border-gray-300'
               }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSelect(assetIndex, asset, e);
+              }}
             />
           )}
         </div>

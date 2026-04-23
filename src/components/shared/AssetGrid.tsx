@@ -121,7 +121,7 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
 
 
   const handleClick = (index: number, asset: AssetPhoto, event: React.MouseEvent) => {
-    if (selectedIds.length > 0) {
+    if (selectable && (event.metaKey || event.ctrlKey || selectedIds.length > 0)) {
       handleSelect(index, asset, event);
     } else {
       setIndex(index);
@@ -214,6 +214,8 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
         photo={context.photo}
         width={context.width}
         height={context.height}
+        selectable={selectable}
+        onSelect={(event) => handleSelect(context.index, context.photo, event)}
       />
     );
   };
