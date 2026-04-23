@@ -112,14 +112,6 @@ const ResponsiveVirtualizedAssetGrid = forwardRef<ResponsiveVirtualizedAssetGrid
     }));
   }, [assets]);
 
-  const handleClick = useCallback((index: number, asset: IAsset, event: React.MouseEvent<HTMLElement>) => {
-    if (selectable && (event.metaKey || event.ctrlKey || selectedIds.length > 0)) {
-      handleSelect(index, asset, event);
-    } else {
-      setIndex(index);
-    }
-  }, [selectedIds, selectable, handleSelect]);
-
   const handleSelect = useCallback((_idx: number, asset: IAsset, event: React.MouseEvent<HTMLElement>) => {
     event.stopPropagation();
     const isPresent = selectedIds.includes(asset.id);
@@ -145,6 +137,14 @@ const ResponsiveVirtualizedAssetGrid = forwardRef<ResponsiveVirtualizedAssetGrid
       setLastSelectedIndex(clickedIndex);
     }
   }, [selectedIds, assets, lastSelectedIndex, updateContext, onSelectionChange]);
+
+  const handleClick = useCallback((index: number, asset: IAsset, event: React.MouseEvent<HTMLElement>) => {
+    if (selectable && (event.metaKey || event.ctrlKey || selectedIds.length > 0)) {
+      handleSelect(index, asset, event);
+    } else {
+      setIndex(index);
+    }
+  }, [selectedIds, selectable, handleSelect]);
 
   const handleEsc = useCallback((event: KeyboardEvent) => {
     if (event.key === "Escape") {

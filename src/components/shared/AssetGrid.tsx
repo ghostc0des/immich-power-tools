@@ -120,14 +120,6 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
   }), [assets, selectedIds, updateContext]);
 
 
-  const handleClick = (index: number, asset: AssetPhoto, event: React.MouseEvent) => {
-    if (selectable && (event.metaKey || event.ctrlKey || selectedIds.length > 0)) {
-      handleSelect(index, asset, event);
-    } else {
-      setIndex(index);
-    }
-  }
-
   const handleSelect = (_idx: number, asset: AssetPhoto, event: React.MouseEvent) => {
 
     event.stopPropagation();
@@ -156,6 +148,14 @@ const AssetGrid = forwardRef<AssetGridRef, AssetGridProps>(({ assets, isInternal
       setLastSelectedIndex(clickedIndex);
     }
   };
+
+  const handleClick = (index: number, asset: AssetPhoto, event: React.MouseEvent) => {
+    if (selectable && (event.metaKey || event.ctrlKey || selectedIds.length > 0)) {
+      handleSelect(index, asset, event);
+    } else {
+      setIndex(index);
+    }
+  }
 
   const slides = useMemo(() => {
     return assets.filter((asset) => !deletedIds.has(asset.id)).map((asset) => ({
