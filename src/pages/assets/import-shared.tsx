@@ -22,14 +22,7 @@ import PageLayout from "@/components/layouts/PageLayout";
 import Header from "@/components/shared/Header";
 import ApiKeyGate from "@/components/shared/ApiKeyGate";
 
-const IMPORT_PERMISSIONS = [
-  { name: "asset.read", description: "Check for existing assets" },
-  { name: "asset.upload", description: "Upload new assets" },
-  { name: "album.read", description: "Read album data" },
-  { name: "album.create", description: "Create new albums" },
-  { name: "album.update", description: "Add assets to albums" },
-  { name: "tag.create", description: "Tag imported assets" },
-];
+import { IMPORT_PERMISSIONS } from "@/config/permissions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";

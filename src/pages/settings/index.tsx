@@ -12,6 +12,7 @@ import toast from "react-hot-toast";
 import API from "@/lib/api";
 import { useConfig } from "@/contexts/ConfigContext";
 import Link from "next/link";
+import { WORKFLOW_PERMISSIONS } from "@/config/permissions";
 
 function ConnectionStatus({ label, url, icon: Icon }: { label: string; url: string; icon: any }) {
   return (
@@ -74,7 +75,7 @@ export default function SettingsPage() {
     }
   };
 
-  const IMPORT_REQUIRED_PERMISSIONS = ["asset.read", "asset.upload", "album.read", "album.create", "album.update", "tag.create"];
+  const IMPORT_REQUIRED_PERMISSIONS = ["asset.read", "asset.upload", "album.read", "album.create", "album.update", "tag.create", "tag.asset"];
 
   const saveImportApiKey = async () => {
     if (!importApiKey.trim()) {
@@ -269,8 +270,8 @@ export default function SettingsPage() {
             )}
             {!validationResult && (
               <div className="flex flex-wrap gap-1">
-                {["asset.read", "asset.update", "album.create", "album.update", "tag.create"].map((p) => (
-                  <Badge key={p} variant="outline" className="text-[10px] h-5 font-mono font-normal">{p}</Badge>
+                {WORKFLOW_PERMISSIONS.map((p) => (
+                  <Badge key={p.name} variant="outline" className="text-[10px] h-5 font-mono font-normal">{p.name}</Badge>
                 ))}
               </div>
             )}
